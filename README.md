@@ -10,4 +10,9 @@
 ### 创建文件夹
 - 一键创建自定义数量的文件夹
 ![请添加图片描述](https://img-blog.csdnimg.cn/direct/95c1b421deab40318bea9b35029c4fe5.png)
-
+### 筛选文件夹
+- 一键筛选未修图文件夹、已修图文件夹
+![请添加图片描述](https://img-blog.csdnimg.cn/direct/9e332a8b02a64f4e81ac958704639880.png)
+![请添加图片描述](https://img-blog.csdnimg.cn/direct/1beecc440c3c48aa9a969e3ba9afb698.png)
+![请添加图片描述](https://img-blog.csdnimg.cn/direct/f0d578d8ddc24cda839fee87a17439eb.png)
+![请添加图片描述](https://img-blog.csdnimg.cn/direct/dcb21d91f71445fdba36921dd984bb0c.png)
