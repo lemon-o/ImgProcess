@@ -16,3 +16,5 @@
 ![请添加图片描述](https://img-blog.csdnimg.cn/direct/1beecc440c3c48aa9a969e3ba9afb698.png)
 ![请添加图片描述](https://img-blog.csdnimg.cn/direct/f0d578d8ddc24cda839fee87a17439eb.png)
 ![请添加图片描述](https://img-blog.csdnimg.cn/direct/dcb21d91f71445fdba36921dd984bb0c.png)
+- 快速打开文件夹和复制文件夹路径
+![请添加图片描述](https://img-blog.csdnimg.cn/direct/84dcfd308d9e47fc8d1dfacb1b051533.png)
