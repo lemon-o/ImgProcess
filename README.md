@@ -18,3 +18,14 @@
 ![请添加图片描述](https://img-blog.csdnimg.cn/direct/dcb21d91f71445fdba36921dd984bb0c.png)
 - 快速打开文件夹和复制文件夹路径
 ![请添加图片描述](https://img-blog.csdnimg.cn/direct/84dcfd308d9e47fc8d1dfacb1b051533.png)
+### 自动将psd导出为jpg
+- 将psd文件放入对应的psd文件夹即可自动导出jpg
+![请添加图片描述](https://img-blog.csdnimg.cn/direct/fda1a7686be441e38dcd4c8297284094.png)
+### 尺寸重量换算
+- 厘米和英寸互相换算
+- 克和盎司互相换算
+![请添加图片描述](https://img-blog.csdnimg.cn/direct/20b0b39a7cc84093936a4f70be05a429.png)
+![请添加图片描述](https://img-blog.csdnimg.cn/direct/002880a68250415bbc74d5ed7376a6a4.png)
+![请添加图片描述](https://img-blog.csdnimg.cn/direct/a48447d4e1fa40acbf5d6985a364006e.png)
+---  
+<center>END
