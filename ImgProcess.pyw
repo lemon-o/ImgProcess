@@ -1033,7 +1033,7 @@ class ImgProcess(QWidget):
                                     if file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')):
                                         file_path = os.path.join(self.parent_dir, sub_dir_path, file)
                                         with Image.open(file_path) as img:
-                                            if img.size == (3200, 4800) or img.size == (4800, 3200):
+                                            if img.size[0] > 1800:
                                                 dir_name = "未选图 " + dir_name
                                                 break
                             item = QListWidgetItem()
@@ -1297,6 +1297,10 @@ class ImgProcess(QWidget):
         for i in range(self.file_right_list.count()):
             item = self.file_right_list.item(i)
             self.right_list_path = item.data(Qt.UserRole)
+            try:
+                os.makedirs(os.path.join(self.right_list_path, "已修", "psd"))
+            except:
+                pass
             self.file_path_right = os.path.join(self.right_list_path, "已修")
             if os.path.exists(self.file_path_right):
                 self.psd_folder_right = os.path.join(self.file_path_right, "psd")
