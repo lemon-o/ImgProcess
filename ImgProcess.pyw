@@ -1017,28 +1017,26 @@ class ImgProcess(QWidget):
                                 break
 
                         if not file_type_exist:
-                            try:
-                                sub_dir_files = os.listdir(os.path.join(self.parent_dir, sub_dir_path))
-                                if any(file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')) for file in sub_dir_files):
-                                    try:
-                                        os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "psd"))
-                                    except:
-                                        pass
-                                if os.path.exists(os.path.join(self.parent_dir, sub_dir_path, "待修")):
-                                    wait_repaire_files = os.listdir(os.path.join(self.parent_dir, sub_dir_path, "待修"))
-                                    if not any(file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')) for file in wait_repaire_files):
-                                        dir_name = "未选图 " + dir_name
-                                elif os.path.exists(os.path.join(self.parent_dir, sub_dir_path)):
-                                    wait_repaire_files = os.listdir(os.path.join(self.parent_dir, sub_dir_path))
-                                    for file in wait_repaire_files:
-                                        if file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')):
-                                            file_path = os.path.join(self.parent_dir, sub_dir_path, file)
-                                            with Image.open(file_path) as img:
-                                                if img.size[0] > 1800:
-                                                    dir_name = "未选图 " + dir_name
-                                                    break
-                            except:
-                                pass
+                            sub_dir_files = os.listdir(os.path.join(self.parent_dir, sub_dir_path))
+                            if any(file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')) for file in sub_dir_files):
+                                try:
+                                    os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "psd"))
+                                    os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "长图"))
+                                except:
+                                    pass
+                            if os.path.exists(os.path.join(self.parent_dir, sub_dir_path, "待修")):
+                                wait_repaire_files = os.listdir(os.path.join(self.parent_dir, sub_dir_path, "待修"))
+                                if not any(file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')) for file in wait_repaire_files):
+                                    dir_name = "未选图 " + dir_name
+                            elif os.path.exists(os.path.join(self.parent_dir, sub_dir_path)):
+                                wait_repaire_files = os.listdir(os.path.join(self.parent_dir, sub_dir_path))
+                                for file in wait_repaire_files:
+                                    if file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')):
+                                        file_path = os.path.join(self.parent_dir, sub_dir_path, file)
+                                        with Image.open(file_path) as img:
+                                            if img.size[0] > 1800:
+                                                dir_name = "未选图 " + dir_name
+                                                break
                             item = QListWidgetItem()
                             # 给item设置数据，包括名称和HTML链接
                             item.setData(Qt.DisplayRole, dir_name)
