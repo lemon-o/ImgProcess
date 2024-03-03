@@ -1021,7 +1021,7 @@ class ImgProcess(QWidget):
                             if any(file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')) for file in sub_dir_files):
                                 try:
                                     os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "psd"))
-                                    os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "长图"))
+                                    os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "其他尺寸"))
                                 except:
                                     pass
                             if os.path.exists(os.path.join(self.parent_dir, sub_dir_path, "待修")):
