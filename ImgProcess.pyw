@@ -904,6 +904,8 @@ class ImgProcess(QWidget):
                 # 创建已修子文件夹中的子文件夹
                 subfolder3_path = os.path.join(subfolder2_path, "psd")
                 os.makedirs(subfolder3_path)
+                subfolder4_path = os.path.join(subfolder2_path, "其他尺寸")
+                os.makedirs(subfolder4_path)
                 success_count += 1
             except:
                 pass
@@ -1025,6 +1027,11 @@ class ImgProcess(QWidget):
                                 except:
                                     pass
                             if os.path.exists(os.path.join(self.parent_dir, sub_dir_path, "待修")):
+                                try:
+                                    os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "psd"))
+                                    os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "其他尺寸"))
+                                except:
+                                    pass
                                 wait_repaire_files = os.listdir(os.path.join(self.parent_dir, sub_dir_path, "待修"))
                                 if not any(file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')) for file in wait_repaire_files):
                                     dir_name = "未选图 " + dir_name
