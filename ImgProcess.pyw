@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import re
 import urllib.parse
 import pygetwindow as gw
 from PyQt5.QtWidgets import QLabel, QMenu, QMessageBox, QPushButton,  QVBoxLayout, QFileDialog, QListWidget, QListWidgetItem, QLineEdit
@@ -100,6 +101,11 @@ class ImgProcess(QWidget):
         self.init_ui()
         ###########设置默认项
         self.settings = QSettings("lemon-o", "ImgProcess")
+        # 从设置中获取上次输入的名称和数量
+        self.last_folder_name = self.settings.value("last_folder_name", "")
+        self.last_num_folders = int(self.settings.value("last_num_folders", "1"))
+        self.folder_name_entry.setText(self.last_folder_name)
+        self.num_folders_entry.setText(str(self.last_num_folders))
         #设置默认文件类型
         last_input_left = self.settings.value("last_input_left", "", str)
         self.filter_combo.setEditText(last_input_left) 
@@ -285,6 +291,12 @@ class ImgProcess(QWidget):
 
 
         # 创建GSfolders界面 ############################################################
+        # 创建标签1
+        self.folder_name_label = QLabel('名称')
+        self.folder_name_label.setStyleSheet('color: #3b3b3b; margin-top: 5px; margin-bottom: 0px;')
+        # 创建标签2
+        self.folder_num_label = QLabel('数量')
+        self.folder_num_label.setStyleSheet('color: #3b3b3b; margin-top: 5px; margin-bottom: 0px;')
         #创建输入框
         linedit_style_1 = 'background-color: white; color: #272727; border-radius: 6px; border: 1px solid #C5C5C5;'
         linedit_height_1 = int((30 / 450) * self.fixed_height)
@@ -292,6 +304,10 @@ class ImgProcess(QWidget):
         self.num_folders_entry.setFixedHeight(linedit_height_1)
         self.num_folders_entry.setPlaceholderText("输入文件夹数量")
         self.num_folders_entry.setStyleSheet(linedit_style_1)
+        self.folder_name_entry = QLineEdit()
+        self.folder_name_entry.setFixedHeight(linedit_height_1)
+        self.folder_name_entry.setPlaceholderText("输入文件夹名称")
+        self.folder_name_entry.setStyleSheet(linedit_style_1)
         #创建按钮
         button_height_build = int((30 / 450) * self.fixed_height)
         button_style_build = """
@@ -316,9 +332,18 @@ class ImgProcess(QWidget):
         # 创建子界面布局管理器
         self.GSfolders_page = QWidget()  
 
+        #创建水平布局管理器
+        hbox_name = QHBoxLayout()
+        hbox_name.addWidget(self.folder_name_label)
+        hbox_name.addWidget(self.folder_name_entry)
+        hbox_num = QHBoxLayout()
+        hbox_num.addWidget(self.folder_num_label)
+        hbox_num.addWidget(self.num_folders_entry)
+
         # 创建主窗口的垂直布局管理器
         vbox_main1 = QVBoxLayout(self.GSfolders_page)
-        vbox_main1.addWidget(self.num_folders_entry)  
+        vbox_main1.addLayout(hbox_name)
+        vbox_main1.addLayout(hbox_num)  
         vbox_main1.addWidget(self.select_path_button)  
         vbox_main1.addSpacing(15)
 
@@ -860,8 +885,11 @@ class ImgProcess(QWidget):
 
 ###GSfolders##############################################################GSfolders#######################################GSfolders#########################################
     def select_path(self):
+        if not self.folder_name_entry.text():
+            QMessageBox.information(self, "提示", "请输入文件夹名称")
+            return
         if not self.num_folders_entry.text():
-            QMessageBox.information(self, "提示", "请先输入文件夹数量")
+            QMessageBox.information(self, "提示", "请输入文件夹数量")
             return
         #设置默认文件夹路径      
         last_folder_path = self.settings.value("last_folder_path", ".")
@@ -875,6 +903,7 @@ class ImgProcess(QWidget):
 
     def create_folders(self, folder_path):
         num_folders = self.num_folders_entry.text()
+        folder_name = self.folder_name_entry.text()
         try:
             num_folders = int(num_folders)
             if num_folders <= 0:
@@ -882,33 +911,56 @@ class ImgProcess(QWidget):
         except ValueError:
             QMessageBox.information(self, "出错了", "请输入正整数的文件夹数量")
             return
-        folder_name = "xy"
         success_count = 0
         skip_count = 0
-        for i in range(1, num_folders + 1):
-            if num_folders == 1:
-                folder_path_i = os.path.join(folder_path, folder_name)
-            else:
-                folder_path_i = os.path.join(folder_path, f"{folder_name}_{i}")
+        # 保存当前输入的名称和数量到设置中
+        self.settings.setValue("last_folder_name", folder_name)
+        self.settings.setValue("last_num_folders", num_folders)
+        # Extract numeric suffix from the existing folder name
+        existing_suffix_match = re.search(r'\d+$', folder_name)
+        existing_suffix = int(existing_suffix_match.group()) if existing_suffix_match else None
+        if existing_suffix is not None:
+            for i in range(existing_suffix, existing_suffix + num_folders):
+                current_folder_name = re.sub(r'\d+$', str(i), folder_name)
+                folder_path_i = os.path.join(folder_path, current_folder_name)
 
-            if os.path.exists(folder_path_i):
-                skip_count += 1
-                continue
-            try:
-                os.makedirs(folder_path_i)
-                # 创建子文件夹
-                subfolder1_path = os.path.join(folder_path_i, "待修")
-                os.makedirs(subfolder1_path)
-                subfolder2_path = os.path.join(folder_path_i, "已修")
-                os.makedirs(subfolder2_path)
-                # 创建已修子文件夹中的子文件夹
-                subfolder3_path = os.path.join(subfolder2_path, "psd")
-                os.makedirs(subfolder3_path)
-                subfolder4_path = os.path.join(subfolder2_path, "其他尺寸")
-                os.makedirs(subfolder4_path)
-                success_count += 1
-            except:
-                pass
+                if os.path.exists(folder_path_i):
+                    skip_count += 1
+                    continue
+                try:
+                    os.makedirs(folder_path_i)
+                    subfolder1_path = os.path.join(folder_path_i, "待修")
+                    os.makedirs(subfolder1_path)
+                    subfolder2_path = os.path.join(folder_path_i, "已修")
+                    os.makedirs(subfolder2_path)
+                    subfolder3_path = os.path.join(subfolder2_path, "psd")
+                    os.makedirs(subfolder3_path)
+                    subfolder4_path = os.path.join(subfolder2_path, "其他尺寸")
+                    os.makedirs(subfolder4_path)
+                    success_count += 1
+                except:
+                    pass
+        else:
+            # 如果文件夹名称末尾没有数字，则在最后一个文字后面从0开始依次递增
+            for i in range(num_folders):
+                current_folder_name = f"{folder_name}{i}"
+                folder_path_i = os.path.join(folder_path, current_folder_name)
+                if os.path.exists(folder_path_i):
+                    skip_count += 1
+                    continue
+                try:
+                    os.makedirs(folder_path_i)
+                    subfolder1_path = os.path.join(folder_path_i, "待修")
+                    os.makedirs(subfolder1_path)
+                    subfolder2_path = os.path.join(folder_path_i, "已修")
+                    os.makedirs(subfolder2_path)
+                    subfolder3_path = os.path.join(subfolder2_path, "psd")
+                    os.makedirs(subfolder3_path)
+                    subfolder4_path = os.path.join(subfolder2_path, "其他尺寸")
+                    os.makedirs(subfolder4_path)
+                    success_count += 1
+                except:
+                    pass
         if success_count > 0:
             QMessageBox.information(self, "提示", f"成功创建 {success_count} 个文件夹。已存在的文件夹被跳过 {skip_count} 个。")
         elif skip_count == num_folders:
