@@ -1503,7 +1503,7 @@ class ImgProcess(QWidget):
             inch = cm * 0.393701
             self.in_input.textChanged.disconnect()
             self.in_input.setText(f"{inch:.4f}")
-            self.cmin_result.setText(f"{cm:.2f} cm / {inch:.2f} in")
+            self.cmin_result.setText(f"{cm:.2f} cm / {inch:.2f} inch")
             self.in_input.textChanged.connect(self.convert_inch_to_cm)
         except ValueError:
             self.cmin_result.setText("未输入换算数字")
@@ -1516,7 +1516,7 @@ class ImgProcess(QWidget):
             cm = inch / 0.393701
             self.cm_input.textChanged.disconnect()
             self.cm_input.setText(f"{cm:.4f}")
-            self.cmin_result.setText(f"{inch:.2f} in / {cm:.2f} cm")
+            self.cmin_result.setText(f"{inch:.2f} inch / {cm:.2f} cm")
             self.cm_input.textChanged.connect(self.convert_cm_to_inch)
         except ValueError:
             self.cmin_result.setText("未输入换算数字")
