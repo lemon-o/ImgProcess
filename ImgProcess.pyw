@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import time
 import re
@@ -46,47 +47,76 @@ class Worker(QThread):
             if os.path.exists(self.file_path_right):
                 self.psd_folder_right = os.path.join(self.file_path_right, "psd")
                 # 遍历目标文件夹中的文件
-                for file_name in os.listdir(self.file_path_right):
-                    # 检查文件类型是否为 PSD
-                    if os.path.isfile(os.path.join(self.file_path_right, file_name)) and file_name.endswith(".psd"):
-                        try:
-                            # 导出为 JPG
-                            jpg_file_name = os.path.splitext(file_name)[0] + ".jpg"
-                            jpg_path = os.path.join(self.right_list_path, "已修", jpg_file_name)
-                            psd = PSDImage.open(os.path.join(self.file_path_right, file_name))
-                            image = psd.compose()
-                            # 将 RGBA 转换为 RGB
-                            if image.mode == "RGBA":
-                                image = image.convert("RGB")
-                            image.save(jpg_path, "JPEG")
-                            # 发送子进度更新信号
-                            jpg_files += 1
-                            if total_psd_files != 0:
-                                total_progress = (jpg_files / total_psd_files) * 100
-                                self.progress_update.emit(int(total_progress))
-                            else:
-                                self.progress_update.emit(100)
-                            # 处理事件队列，确保及时更新UI
-                            QCoreApplication.processEvents()
-                        except Exception as e:
-                            full_path = os.path.join(self.file_path_right, file_name)
-                            print(f"无法处理文件: {file_name} ({full_path})")
-                        destination_path = os.path.join(self.file_path_right, file_name)
-                        source_path = os.path.join(self.psd_folder_right, file_name)
-                        try:
-                            # 移动 PSD 文件到 "psd" 文件夹
-                            os.rename(destination_path, source_path)
-                        except FileExistsError:
-                            # 在文件名中添加后缀
-                            base, extension = os.path.splitext(file_name)
-                            counter = 1
-                            new_psd_dest_path = os.path.join(self.psd_folder_right, f"{base}_backup_{counter}{extension}")   
-                            # 生成唯一的文件名
-                            while os.path.exists(new_psd_dest_path):
-                                counter += 1
-                                new_psd_dest_path = os.path.join(self.psd_folder_right, f"{base}_backup_{counter}{extension}")
-                            # 移动文件到新路径
-                            os.rename(destination_path, new_psd_dest_path)
+            for file_name in os.listdir(self.file_path_right):
+                # 检查文件类型是否为 PSD
+                if os.path.isfile(os.path.join(self.file_path_right, file_name)) and file_name.endswith(".psd"):
+                    try:
+                        # 导出为 JPG
+                        jpg_file_name = os.path.splitext(file_name)[0] + ".jpg"
+                        jpg_path = os.path.join(self.right_list_path, "已修", jpg_file_name)
+                        psd = PSDImage.open(os.path.join(self.file_path_right, file_name))
+                        image = psd.compose()
+                        # 将 RGBA 转换为 RGB
+                        if image.mode == "RGBA":
+                            image = image.convert("RGB")
+                        image.save(jpg_path, "JPEG")
+
+                        # 复制到“其他尺寸”文件夹
+                        other_sizes_path = os.path.join(self.file_path_right, "其他尺寸")
+                        if not os.path.exists(other_sizes_path):
+                            os.makedirs(other_sizes_path)
+                        shutil.copy(jpg_path, os.path.join(other_sizes_path, jpg_file_name))
+
+                        # 发送子进度更新信号
+                        jpg_files += 1
+                        if total_psd_files != 0:
+                            total_progress = (jpg_files / total_psd_files) * 100
+                            self.progress_update.emit(int(total_progress))
+                        else:
+                            self.progress_update.emit(100)
+
+                        # 处理事件队列，确保及时更新UI
+                        QCoreApplication.processEvents()
+
+                        # 裁剪图片为方图（不包括“其他尺寸”里的图片）
+                        img = Image.open(jpg_path)
+                        width, height = img.size
+                        # 以宽度为基准裁剪成方图
+                        if width > height:
+                            left = (width - height) // 2
+                            top = 0
+                            right = left + height
+                            bottom = height
+                        else:
+                            left = 0
+                            top = (height - width) // 2
+                            right = width
+                            bottom = top + width
+
+                        cropped_img = img.crop((left, top, right, bottom))
+                        cropped_img.save(jpg_path)
+
+                    except Exception as e:
+                        full_path = os.path.join(self.file_path_right, file_name)
+                        print(f"无法处理文件: {file_name} ({full_path})")
+                        print(f"错误信息: {e}")
+
+                    destination_path = os.path.join(self.file_path_right, file_name)
+                    source_path = os.path.join(self.psd_folder_right, file_name)
+                    try:
+                        # 移动 PSD 文件到 "psd" 文件夹
+                        os.rename(destination_path, source_path)
+                    except FileExistsError:
+                        # 在文件名中添加后缀
+                        base, extension = os.path.splitext(file_name)
+                        counter = 1
+                        new_psd_dest_path = os.path.join(self.psd_folder_right, f"{base}_backup_{counter}{extension}")   
+                        # 生成唯一的文件名
+                        while os.path.exists(new_psd_dest_path):
+                            counter += 1
+                            new_psd_dest_path = os.path.join(self.psd_folder_right, f"{base}_backup_{counter}{extension}")
+                        # 移动文件到新路径
+                        os.rename(destination_path, new_psd_dest_path)
 
         # 当线程耗时任务完成时，直接发送总进度为100%
         self.progress_update.emit(100)
