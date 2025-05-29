@@ -117,6 +117,16 @@ class Worker(QThread):
                             new_psd_dest_path = os.path.join(self.psd_folder_right, f"{base}_backup_{counter}{extension}")
                         # 移动文件到新路径
                         os.rename(destination_path, new_psd_dest_path)
+                    # 复制“包装袋.jpg”到 self.file_path_right
+                    dir_path = os.path.dirname(self.right_list_path)
+                    target_file = os.path.join(dir_path, "包装袋.jpg")
+                    if os.path.isfile(target_file):
+                        try:
+                            shutil.copy2(target_file, self.file_path_right)  
+                        except Exception as e:
+                            print(f"复制目标图片失败: {e}")
+                    else:
+                        print(f"未找到目标图片: {target_file}")
 
         # 当线程耗时任务完成时，直接发送总进度为100%
         self.progress_update.emit(100)
@@ -1516,6 +1526,7 @@ class ImgProcess(QWidget):
                     window.close()
         except Exception as e:
             print(f"An error occurred: {e}")
+
 ###FolderFilter#######################################################FolderFilter###################################FolderFilter##################################################### 
 
 
