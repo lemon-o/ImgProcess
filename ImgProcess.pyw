@@ -117,16 +117,24 @@ class Worker(QThread):
                             new_psd_dest_path = os.path.join(self.psd_folder_right, f"{base}_backup_{counter}{extension}")
                         # 移动文件到新路径
                         os.rename(destination_path, new_psd_dest_path)
-                    # 复制“包装袋.jpg”到 self.file_path_right
-                    dir_path = os.path.dirname(self.right_list_path)
-                    target_file = os.path.join(dir_path, "包装袋.jpg")
-                    if os.path.isfile(target_file):
-                        try:
-                            shutil.copy2(target_file, self.file_path_right)  
-                        except Exception as e:
-                            print(f"复制目标图片失败: {e}")
+
+                    # 复制"图片复制"文件夹内的所有jpg和png图片到 self.file_path_right
+                    copy_dir = os.path.join(os.path.dirname(self.right_list_path), "图片复制")
+                    # 检查"图片复制"文件夹是否存在
+                    if os.path.isdir(copy_dir):
+                        # 遍历文件夹中的所有文件
+                        for filename in os.listdir(copy_dir):
+                            # 检查文件扩展名是否为jpg或png（不区分大小写）
+                            if filename.lower().endswith(('.jpg', '.png')):
+                                source_file = os.path.join(copy_dir, filename)
+                                try:
+                                    # 复制文件到目标路径
+                                    shutil.copy2(source_file, self.file_path_right)
+                                    print(f"成功复制图片: {filename}")
+                                except Exception as e:
+                                    print(f"复制图片失败: {filename}, 错误: {e}")
                     else:
-                        print(f"未找到目标图片: {target_file}")
+                        print(f"未找到'图片复制'文件夹: {copy_dir}")
 
         # 当线程耗时任务完成时，直接发送总进度为100%
         self.progress_update.emit(100)
@@ -146,10 +154,12 @@ class ImgProcess(QWidget):
         self.last_num_folders = int(self.settings.value("last_num_folders", "1"))
         self.folder_name_entry.setText(self.last_folder_name)
         self.num_folders_entry.setText(str(self.last_num_folders))
-        #设置默认文件类型
-        last_input_left = self.settings.value("last_input_left", "", str)
-        self.filter_combo.setEditText(last_input_left) 
-        self.filter_combo.lineEdit().textChanged.connect(lambda text: self.settings.setValue("last_input_left", text))
+        # 读取 last_input_left，如果没有则默认 ".psd"
+        last_input_left = self.settings.value("last_input_left", ".psd", str)
+        self.filter_combo.setEditText(last_input_left)  # 设置组合框的初始文本
+        self.filter_combo.lineEdit().textChanged.connect(
+            lambda text: self.settings.setValue("last_input_left", text)  # 保存用户输入
+        )
         #设置默认排序方式
         last_selected_right = self.settings.value("last_selected_right", 0, int)
         self.sort_combo.setCurrentIndex(last_selected_right) 
@@ -1001,6 +1011,93 @@ class ImgProcess(QWidget):
                     success_count += 1
                 except:
                     pass
+        # 同时创建一个名为"需要复制的图片"的文件夹
+        target_dir = os.path.join(folder_path, "图片复制")
+        os.makedirs(target_dir, exist_ok=True)
+
+        # 创建说明文件
+        instruction_file = os.path.join(target_dir, "说明.txt")
+        # 写入说明内容
+        instruction_content = "修图完毕后，此文件夹内的所有图片将自动复制到每一个sku文件夹的子文件夹【已修】\n\n也可双击【手动复制.bat】进行复制图片"
+        #如果不存在说明文件，则创建
+        if not os.path.exists(instruction_file):
+            with open(instruction_file, "w", encoding="utf-8") as f:
+                f.write(instruction_content)
+
+        # 再创建“手动复制”批处理文件路径
+        bat_file = os.path.join(target_dir, "手动复制.bat")
+        # 批处理内容
+        bat_content = r"""@echo off
+        chcp 65001
+        setlocal enabledelayedexpansion
+
+        :: 使用 PUSHD 进入当前 .bat 所在目录（兼容 UNC）
+        PUSHD %~dp0
+
+        set "current_dir=%cd%"
+        for %%i in ("%cd%") do set "parent_dir=%%~dpi"
+
+        :: 切换到上一级目录
+        cd /d "%parent_dir%" || (
+            echo 无法进入上级目录。
+            pause
+            POPD
+            exit /b
+        )
+
+        :: 检查当前目录是否有JPG或PNG图片
+        set "has_images=0"
+        for %%I in ("%current_dir%\*.jpg" "%current_dir%\*.png") do (
+            if exist "%%I" set "has_images=1"
+        )
+
+        :: 如果没有图片则提示并退出
+        if "!has_images!"=="0" (
+            echo 未发现图片文件（.jpg .png），请先将图片放至此文件夹内以便复制
+            :: 返回原始路径
+            POPD
+            echo.
+            echo 按任意键退出...
+            pause >nul
+            exit /b
+        )
+
+        :: 主循环：处理每个子文件夹
+        for /d %%F in ("*") do (
+            if /i not "%%~fF"=="%current_dir%" (
+                set "target=%%~fF\已修"
+                if exist "!target!" (
+                    echo 正在复制到: "!target!"
+                    for %%I in ("%current_dir%\*.jpg" "%current_dir%\*.png") do (
+                        if exist "%%I" (
+                            set "filename=%%~nxI"
+                            if not exist "!target!\!filename!" (
+                                copy "%%I" "!target!\" >nul
+                                echo 复制: !filename!
+                            ) else (
+                                echo 已存在，跳过: !filename!
+                            )
+                        )
+                    )
+                ) else (
+                    echo 跳过: "!target!" 文件夹不存在
+                )
+            )
+        )
+
+        :: 返回原始路径
+        POPD
+        echo 所有操作完成。
+
+        echo 请按任意键关闭窗口...
+        pause >nul
+        """
+
+        # 如果不存在“手动复制”批处理文件，则创建
+        if not os.path.exists(bat_content):
+            with open(bat_file, "w", encoding="utf-8") as f:
+                f.write(bat_content)
+
         if success_count > 0:
             QMessageBox.information(self, "提示", f"成功创建 {success_count} 个文件夹。已存在的文件夹被跳过 {skip_count} 个。")
         elif skip_count == num_folders:
@@ -1021,7 +1118,7 @@ class ImgProcess(QWidget):
         # 获取用户输入的文件类型
         file_type = self.filter_combo.currentText()        
         if not file_type:
-            QMessageBox.information(self,'提示','请输入要筛选的文件类型\n例如：“.txt”')
+            QMessageBox.information(self,'提示','请输入要筛选的文件类型\n例如：“.psd”')
             return
         else:
             #设置进度条为初始状态
@@ -1101,8 +1198,11 @@ class ImgProcess(QWidget):
                 for dir_name in dirs:              
                     # 子文件夹的路径
                     sub_dir_path = os.path.join(root, dir_name)
+                    # 如果"需要复制的图片"文件夹不存在，则创建
+                    target_dir = os.path.join(self.dir_path, "图片复制")
+                    os.makedirs(target_dir, exist_ok=True)
                     # 如果该子文件夹是目录A的一级子文件夹，则添加到控件中
-                    if os.path.dirname(sub_dir_path) == self.dir_path:
+                    if os.path.dirname(sub_dir_path) == self.dir_path and sub_dir_path != target_dir:
                         # 检查子文件夹及其所有子文件夹中是否存在.file_type文件
                         file_type_exist = False
                         for sub_root, sub_dirs, sub_files in os.walk(sub_dir_path):
@@ -1187,6 +1287,89 @@ class ImgProcess(QWidget):
         self.file_right_list.itemDoubleClicked.connect(lambda: self.item_double_clicked(self.file_right_list))
         self.file_left_list.customContextMenuRequested.connect(self.show_context_menu)
         self.file_right_list.customContextMenuRequested.connect(self.show_context_menu)
+
+        # 在"需要复制的图片"文件夹内创建说明文件
+        instruction_file = os.path.join(target_dir, "说明.txt")
+        # 写入说明内容
+        instruction_content = "修图完毕后，此文件夹内的所有图片将自动复制到每一个sku文件夹的子文件夹【已修】\n\n也可双击【手动复制.bat】进行复制图片"
+        #如果不存在说明文件，则创建
+        if not os.path.exists(instruction_file):
+            with open(instruction_file, "w", encoding="utf-8") as f:
+                f.write(instruction_content)
+
+        # 再创建“手动复制”批处理文件路径
+        bat_file = os.path.join(target_dir, "手动复制.bat")
+        # 批处理内容
+        bat_content = r"""@echo off
+        chcp 65001
+        setlocal enabledelayedexpansion
+
+        :: 使用 PUSHD 进入当前 .bat 所在目录（兼容 UNC）
+        PUSHD %~dp0
+
+        set "current_dir=%cd%"
+        for %%i in ("%cd%") do set "parent_dir=%%~dpi"
+
+        :: 切换到上一级目录
+        cd /d "%parent_dir%" || (
+            echo 无法进入上级目录。
+            pause
+            POPD
+            exit /b
+        )
+
+        :: 检查当前目录是否有JPG或PNG图片
+        set "has_images=0"
+        for %%I in ("%current_dir%\*.jpg" "%current_dir%\*.png") do (
+            if exist "%%I" set "has_images=1"
+        )
+
+        :: 如果没有图片则提示并退出
+        if "!has_images!"=="0" (
+            echo 未发现图片文件（.jpg .png），请先将图片放至此文件夹内以便复制
+            :: 返回原始路径
+            POPD
+            echo.
+            echo 按任意键退出...
+            pause >nul
+            exit /b
+        )
+
+        :: 主循环：处理每个子文件夹
+        for /d %%F in ("*") do (
+            if /i not "%%~fF"=="%current_dir%" (
+                set "target=%%~fF\已修"
+                if exist "!target!" (
+                    echo 正在复制到: "!target!"
+                    for %%I in ("%current_dir%\*.jpg" "%current_dir%\*.png") do (
+                        if exist "%%I" (
+                            set "filename=%%~nxI"
+                            if not exist "!target!\!filename!" (
+                                copy "%%I" "!target!\" >nul
+                                echo 复制: !filename!
+                            ) else (
+                                echo 已存在，跳过: !filename!
+                            )
+                        )
+                    )
+                ) else (
+                    echo 跳过: "!target!" 文件夹不存在
+                )
+            )
+        )
+
+        :: 返回原始路径
+        POPD
+        echo 所有操作完成。
+
+        echo 请按任意键关闭窗口...
+        pause >nul
+        """
+
+        # 如果不存在“手动复制”批处理文件，则创建
+        if not os.path.exists(bat_content):
+            with open(bat_file, "w", encoding="utf-8") as f:
+                f.write(bat_content)
 
     def item_double_clicked(self, list_widget):
         if self.expanded and self.y() == self.monitor_top_border - self.margin:
