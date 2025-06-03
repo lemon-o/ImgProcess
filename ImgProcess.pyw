@@ -1,16 +1,30 @@
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 import shutil
+import subprocess
 import sys
 import time
 import re
 import urllib.parse
+import zipfile
+import tempfile   
+import subprocess
+import shutil
+import urllib.request
+import psutil
 import pygetwindow as gw
-from PyQt5.QtWidgets import QLabel, QMenu, QMessageBox, QPushButton,  QVBoxLayout, QFileDialog, QListWidget, QListWidgetItem, QLineEdit
+from PyQt5.QtWidgets import QLabel, QMenu, QMessageBox, QPushButton,  QVBoxLayout, QFileDialog, QListWidget, QListWidgetItem, QLineEdit, QDialog  
 from PyQt5.QtWidgets import QComboBox, QFrame, QStackedWidget, QProgressBar, QApplication, QWidget, QDesktopWidget,QHBoxLayout, QShortcut
 from PyQt5.QtGui import QBrush, QFont, QIcon,QColor,QDesktopServices, QPainter, QKeySequence, QRegExpValidator
-from PyQt5.QtCore import QCoreApplication, QPropertyAnimation, QRect, QSettings,Qt, QUrl, QTimer, QThread, pyqtSignal, QRegExp
+from PyQt5.QtCore import QCoreApplication, QPropertyAnimation, QRect, QSettings,Qt, QUrl, QTimer, QThread, pyqtSignal, QRegExp, QProcess      
 from PIL import Image
 from psd_tools import PSDImage
+
+# —— 配置 FFmpeg 的绝对路径 —— #
+FFMPEG_ABSOLUTE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
+FFPROBE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffprobe.exe"
+
 
 class Worker(QThread):
     finished_signal = pyqtSignal()
@@ -44,6 +58,7 @@ class Worker(QThread):
             folder_path = os.path.join(item.data(Qt.UserRole), "已修")
             self.right_list_path = item.data(Qt.UserRole)
             self.file_path_right = os.path.join(self.right_list_path, "已修")
+
             if os.path.exists(self.file_path_right):
                 self.psd_folder_right = os.path.join(self.file_path_right, "psd")
                 # 遍历目标文件夹中的文件
@@ -100,6 +115,8 @@ class Worker(QThread):
                         full_path = os.path.join(self.file_path_right, file_name)
                         print(f"无法处理文件: {file_name} ({full_path})")
                         print(f"错误信息: {e}")
+                        logging.info(f"无法处理文件: {file_name} ({full_path})")
+                        logging.info(f"错误信息: {e}")
 
                     destination_path = os.path.join(self.file_path_right, file_name)
                     source_path = os.path.join(self.psd_folder_right, file_name)
@@ -118,29 +135,438 @@ class Worker(QThread):
                         # 移动文件到新路径
                         os.rename(destination_path, new_psd_dest_path)
 
-                    # 复制"图片复制"文件夹内的所有jpg和png图片到 self.file_path_right
-                    copy_dir = os.path.join(os.path.dirname(self.right_list_path), "图片复制")
-                    # 检查"图片复制"文件夹是否存在
-                    if os.path.isdir(copy_dir):
-                        # 遍历文件夹中的所有文件
-                        for filename in os.listdir(copy_dir):
-                            # 检查文件扩展名是否为jpg或png（不区分大小写）
-                            if filename.lower().endswith(('.jpg', '.png')):
-                                source_file = os.path.join(copy_dir, filename)
-                                try:
-                                    # 复制文件到目标路径
-                                    shutil.copy2(source_file, self.file_path_right)
-                                    print(f"成功复制图片: {filename}")
-                                except Exception as e:
-                                    print(f"复制图片失败: {filename}, 错误: {e}")
-                    else:
-                        print(f"未找到'图片复制'文件夹: {copy_dir}")
-
+            # 复制"图片复制"文件夹内的所有jpg和png图片到 self.file_path_right
+            copy_dir = os.path.join(os.path.dirname(self.right_list_path), "图片复制")
+            # 检查"图片复制"文件夹是否存在
+            if os.path.isdir(copy_dir):
+                # 遍历文件夹中的所有文件
+                for filename in os.listdir(copy_dir):
+                    # 检查文件扩展名是否为jpg或png（不区分大小写）
+                    if filename.lower().endswith(('.jpg', '.png')):
+                        source_file = os.path.join(copy_dir, filename)
+                        try:
+                            # 复制文件到目标路径
+                            shutil.copy2(source_file, self.file_path_right)
+                            print(f"成功复制图片: {filename}")
+                            logging.info(f"成功复制图片: {filename}")
+                        except Exception as e:
+                            print(f"复制图片失败: {filename}, 错误: {e}")
+                            logging.info(f"复制图片失败: {filename}, 错误: {e}")
+            else:
+                print(f"未找到'图片复制'文件夹: {copy_dir}")
+                logging.info(f"未找到'图片复制'文件夹: {copy_dir}")
+         
         # 当线程耗时任务完成时，直接发送总进度为100%
         self.progress_update.emit(100)
         time.sleep(0.5)
-        self.start1 = False                 
+        self.start1 = False            
         self.finished_signal.emit()
+
+class VideoWorker(QThread):
+    finished_signal = pyqtSignal()
+
+    def __init__(self, folders_list, parent=None):
+        super().__init__(parent)
+        self.folders_list = folders_list  # 接收文件夹列表 [(dir_path, file_path), ...]
+
+    def run(self):
+        for dir_path, file_path in self.folders_list:
+            # 处理单个文件夹的逻辑
+            self.process_folder(dir_path, file_path)
+        self.finished_signal.emit()
+
+    def process_folder(self, dir_path, file_path):
+        # 1. 收集原始视频文件
+        video_files = []
+        for fn in os.listdir(dir_path):  # 使用传入的 dir_path 参数
+            fullp = os.path.join(dir_path, fn)
+            if os.path.isfile(fullp) and fn.lower().endswith(".mp4"):
+                video_files.append((fn, fullp))
+
+        # 2. 处理视频文件
+        if video_files:
+            for src_filename, src_fullpath in video_files:
+                print(f"正在处理视频: {src_filename}")
+                logging.info(f"正在处理视频: {src_filename}")
+
+                # 构造输出文件名（在原名后面加后缀 "_cropped"）
+                name_no_ext, ext = os.path.splitext(src_filename)
+                new_filename = f"{name_no_ext}_cropped{ext}"
+                temp_output = os.path.join(dir_path, new_filename)  # 使用传入的 dir_path
+                final_output = os.path.join(file_path, new_filename)  # 使用传入的 file_path
+
+                # 如果输出文件名已存在，则添加数字后缀
+                if os.path.exists(temp_output):
+                    counter = 1
+                    while True:
+                        new_filename = f"{name_no_ext}_cropped_{counter}{ext}"
+                        temp_output = os.path.join(dir_path, new_filename)
+                        final_output = os.path.join(file_path, new_filename)
+                        if not os.path.exists(temp_output):  # 确保找到不存在的文件名
+                            break
+                        counter += 1
+                
+                # 用 ffprobe 获取视频宽高
+                cmd_probe = [
+                    FFPROBE_PATH, "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=width,height",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    src_fullpath
+                ]
+                result = subprocess.run(
+                    cmd_probe,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='ignore',
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                if result.returncode != 0:
+                    print(f"[错误] 无法获取视频分辨率（{src_filename}）：{result.stderr.strip()}")
+                    logging.info(f"[错误] 无法获取视频分辨率（{src_filename}）：{result.stderr.strip()}")
+                    # 本文件处理失败，但继续处理后续文件
+                    continue
+
+                try:
+                    w_str, h_str = result.stdout.splitlines()
+                    w = int(w_str.strip())
+                    h = int(h_str.strip())
+                except Exception as e:
+                    print(f"[错误] 解析分辨率失败（{src_filename}）：{e}")
+                    logging.info(f"[错误] 解析分辨率失败（{src_filename}）：{e}")
+                    continue
+
+                # 计算裁剪参数：居中且裁剪为 min_dim×min_dim 的正方形
+                min_dim = min(w, h)
+                x = (w - min_dim) // 2
+                y = (h - min_dim) // 2
+
+                # 用 ffmpeg 裁剪并去除音轨（原处理代码）
+                cmd_crop = [
+                    FFMPEG_ABSOLUTE_PATH, "-y", "-i", src_fullpath,
+                    "-vf", f"crop={min_dim}:{min_dim}:{x}:{y}",
+                    "-an",
+                    "-c:v", "libx264",
+                    "-preset", "medium",
+                    temp_output
+                ]
+                proc = subprocess.run(
+                    cmd_crop,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='ignore',
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                if proc.returncode != 0:
+                    print(f"[错误] ffmpeg 裁剪失败（{src_filename}）：{proc.stderr.strip()}")
+                    logging.info(f"[错误] ffmpeg 裁剪失败（{src_filename}）：{proc.stderr.strip()}")
+                    # 本文件处理失败，但继续处理后续文件
+                    # 如果临时文件存在，也可以选择删除或忽略
+                    if os.path.exists(temp_output):
+                        try:
+                            os.remove(temp_output)
+                        except:
+                            pass
+                    continue
+                # 处理完毕后强制结束 FFmpeg 进程
+                kill_ffmpeg_processes()
+                # 将生成的临时文件移动到目标目录
+                try:
+                    shutil.move(temp_output, final_output)
+                    print(f"[完成] 视频已处理并移动：{final_output}")
+                    logging.info(f"[完成] 视频已处理并移动：{final_output}")
+                except Exception as e:
+                    print(f"[错误] 移动文件时异常（{temp_output} → {final_output}）：{e}")
+                    logging.info(f"[错误] 移动文件时异常（{temp_output} → {final_output}）：{e}")
+                    # 如果移动失败，可考虑删除残留的 temp_output
+                    if os.path.exists(temp_output):
+                        try:
+                            os.remove(temp_output)
+                        except:
+                            pass
+                    continue
+
+def kill_ffmpeg_processes():
+    for proc in psutil.process_iter(['pid', 'name']):
+        try:
+            if 'ffmpeg' in proc.info['name'].lower():
+                proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+
+class FFmpegInstallDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent  # 保存父窗口引用
+        self.setWindowTitle("安装 FFmpeg")
+        self.setGeometry(400, 400, 500, 200)
+        self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.CustomizeWindowHint)
+        
+        # 创建布局
+        layout = QVBoxLayout()
+        
+        # 标题
+        title_label = QLabel("FFmpeg 安装中...")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # 提示信息
+        info_label = QLabel("请等待安装完成，不要关闭此窗口。")
+        info_label.setStyleSheet("margin-bottom: 10px;")
+        info_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(info_label)
+        
+        # 状态标签
+        self.status_label = QLabel("正在初始化安装程序...")
+        self.status_label.setStyleSheet("""
+            QLabel {
+                font-size: 14px;
+                padding: 10px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                background-color: #f8f9fa;
+                min-height: 40px;
+            }
+        """)
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
+        
+        # 进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        layout.addWidget(self.progress_bar)
+        
+        # 设置布局
+        self.setLayout(layout)
+        
+        # 安装线程
+        self.install_thread = None
+        
+    def start_installation(self):
+        """开始安装FFmpeg"""
+        self.status_label.setText("正在检查系统环境...")
+        self.show()  # 确保弹窗显示
+        
+        # 创建并启动安装线程
+        self.install_thread = FFmpegInstallThread()
+        self.install_thread.status_updated.connect(self.update_status)
+        self.install_thread.progress_updated.connect(self.update_progress)
+        self.install_thread.finished_signal.connect(self.handle_install_result)
+        self.install_thread.start()
+        
+    def update_status(self, text):
+        """更新状态信息"""
+        self.status_label.setText(text)
+        
+    def update_progress(self, value):
+        """更新进度条"""
+        self.progress_bar.setValue(value)
+        
+    def handle_install_result(self, success, message):
+        """处理安装结果"""
+        if success:
+            self.status_label.setText("安装完成！")
+            self.progress_bar.setValue(100)
+            QMessageBox.information(self, "安装成功", message)
+            # 通知主线程安装完成
+            if self.parent:
+                self.parent.ffmpeg_installed(True, message)
+        else:
+            self.status_label.setText(f"安装失败: {message}")
+            QMessageBox.critical(self, "安装失败", message)
+            # 通知主线程安装失败
+            if self.parent:
+                self.parent.ffmpeg_installed(False, message)
+        # 安装完成后关闭弹窗
+        self.close()
+
+class FFmpegInstallThread(QThread):
+    status_updated = pyqtSignal(str)  # 发送状态更新信号
+    progress_updated = pyqtSignal(int)  # 发送进度更新
+    finished_signal = pyqtSignal(bool, str)  # 发送完成信号(成功/失败, 消息)
+
+    def run(self):
+        temp_dir = None
+        try:
+            # 检查是否已安装FFmpeg
+            self.status_updated.emit("正在检查系统环境...")
+            self.progress_updated.emit(10)
+            if shutil.which("ffmpeg"):
+                self.status_updated.emit("FFmpeg 已安装")
+                self.progress_updated.emit(100)
+                self.finished_signal.emit(True, "FFmpeg 已安装")
+                return
+
+            # 创建临时目录
+            self.status_updated.emit("正在准备安装文件...")
+            self.progress_updated.emit(15)
+            temp_dir = tempfile.mkdtemp()
+            ffmpeg_zip_path = os.path.join(temp_dir, "ffmpeg.zip")
+
+            # 下载 FFmpeg
+            self.status_updated.emit("开始下载FFmpeg...")
+            self.progress_updated.emit(20)
+            
+            # 下载地址
+            ffmpeg_urls = [
+                "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+                "http://oc.lemonlineo.top:54344/d/SA6400/%E8%B5%84%E6%BA%90/2-%E5%AE%89%E8%A3%85%E5%8C%85/exe/ffmpeg-master-latest-win64-gpl.zip?sign=-pW1oSnYvv5gy0cHUR7qsS8exxFzlaDap1oVwZXgGN8=:0",
+            ]
+
+            def update_progress(count, block_size, total_size):
+                if total_size > 0:
+                    downloaded = count * block_size
+                    downloaded_mb = downloaded / (1024 * 1024)
+                    total_mb = total_size / (1024 * 1024)
+                    
+                    self.status_updated.emit(
+                        f"正在下载FFmpeg...  {total_mb:.1f}MB / {downloaded_mb:.1f}MB"
+                    )
+                    
+                    # 计算进度 (20-80% 用于下载)
+                    progress = 20 + int(60 * downloaded / total_size)
+                    self.progress_updated.emit(min(progress, 80))
+
+            # 尝试多个下载地址
+            download_success = False
+            last_error = None
+
+            for url in ffmpeg_urls:
+                try:
+                    self.status_updated.emit(f"尝试从 {'GitHub' if url == ffmpeg_urls[0] else '国内源'} 下载...")
+                    urllib.request.urlretrieve(url, ffmpeg_zip_path, update_progress)
+                    download_success = True
+                    break
+                except Exception as e:
+                    last_error = e
+                    continue
+
+            if not download_success:
+                logging.info(f"所有下载源尝试失败，最后错误: {str(last_error)}")
+                raise RuntimeError(f"所有下载源尝试失败，最后错误: {str(last_error)}")
+
+            # 解压文件
+            self.status_updated.emit("正在安装文件...")
+            self.progress_updated.emit(85)
+            
+            extracted_dir = r"C:\ffmpeg"
+            os.makedirs(extracted_dir, exist_ok=True)
+            
+            with zipfile.ZipFile(ffmpeg_zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extracted_dir)
+
+            # 创建bat文件
+            self.status_updated.emit("正在配置环境变量...")
+            self.progress_updated.emit(90)
+            
+            # 使用新的bat文件内容
+            bat_content = """@echo off
+:: 需要管理员权限
+>nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
+if '%errorlevel%' NEQ '0' (
+    echo 请求管理员权限...
+    goto UACPrompt
+) else ( goto gotAdmin )
+
+:UACPrompt
+    echo Set UAC = CreateObject^("Shell.Application"^) > "%temp%\getadmin.vbs"
+    echo UAC.ShellExecute "%~s0", "", "", "runas", 1 >> "%temp%\getadmin.vbs"
+    "%temp%\getadmin.vbs"
+    exit /B
+
+:gotAdmin
+    if exist "%temp%\getadmin.vbs" ( del "%temp%\getadmin.vbs" )
+
+:: 直接指定要添加的路径（无需手动输入参数）
+set "target_path=C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl\\bin"
+
+:: 校验路径是否存在
+if not exist "%target_path%" (
+    echo 错误：路径不存在 "%target_path%"
+    timeout /t 5 /nobreak >nul
+    exit /b
+)
+
+:: 获取当前系统Path
+for /f "tokens=2,*" %%a in ('reg query "HKLM\\System\\CurrentControlSet\\Control\\Session Manager\\Environment" /v Path ^| findstr "Path"') do set "current_path=%%b"
+
+:: 检查是否已存在（防止重复添加）
+if "%current_path:C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl\\bin=%" neq "%current_path%" (
+    echo 已存在，跳过添加
+    echo 窗口将在5秒后自动关闭...
+    timeout /t 5 /nobreak >nul
+    exit /b
+)
+
+:: 添加路径到系统Path
+echo 正在将FFmpeg路径添加到系统环境变量...
+setx /m Path "%current_path%;%target_path%"
+
+:: 立即刷新环境变量
+taskkill /f /im explorer.exe >nul 2>&1
+start explorer.exe
+
+:: 保持窗口显示5秒后自动关闭
+echo.
+echo 添加成功！窗口将在5秒后自动关闭...
+timeout /t 5 /nobreak >nul
+exit
+
+:: 兼容旧系统的备用方案（当timeout不可用时启用）
+:: ping 127.0.0.1 -n 6 >nul
+"""
+            
+            bat_path = os.path.join(temp_dir, "add_to_path.bat")
+            with open(bat_path, "w", encoding="gbk") as f:
+                f.write(bat_content)
+
+            # 以管理员权限运行bat文件
+            self.status_updated.emit("正在请求管理员权限以添加环境变量...")
+            self.progress_updated.emit(95)
+            
+            process = QProcess()
+            command = f"""
+            $batPath = '{bat_path.replace("'", "''")}'
+            try {{
+                $process = Start-Process -FilePath cmd.exe -ArgumentList '/c', $batPath -Verb RunAs -Wait -PassThru
+                exit $process.ExitCode
+            }} catch {{
+                Write-Error $_
+                exit 1
+            }}
+            """
+            process.start("powershell.exe", ["-Command", command])
+            process.waitForFinished(-1)
+
+            exit_code = process.exitCode()
+            output = process.readAllStandardOutput().data().decode("gbk", errors="ignore")
+            error = process.readAllStandardError().data().decode("gbk", errors="ignore")
+
+            if exit_code == 0:
+                self.status_updated.emit("安装成功！")
+                self.progress_updated.emit(100)
+                self.finished_signal.emit(True, "FFmpeg安装和环境变量配置完成，请重启软件生效")
+            else:
+                error_msg = f"添加环境变量失败 (退出代码: {exit_code})"
+                if error.strip():
+                    error_msg += f"\n错误信息:\n{error.strip()}"
+                raise RuntimeError(error_msg)
+            
+        except Exception as e:
+            self.status_updated.emit(f"安装失败: {str(e)}")
+            self.progress_updated.emit(0)
+            self.finished_signal.emit(False, str(e))
+        finally:
+            # 清理临时文件
+            if temp_dir:
+                try:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception:
+                    pass
 
 class ImgProcess(QWidget):
 
@@ -169,11 +595,13 @@ class ImgProcess(QWidget):
         #初始化变量
         self.parent_dir = None
         self.dir_path = None
+        self.sub_dir_path = None
         self.file_type = ""
         self.new_position = None
         self.animation = None  # 初始化动画属性
         self.psd_found = False
         self.thread_running = False
+        self.video_work_thread_running = False
         self.is_dragging = False
         self.expanded = None
         self.double_clicked = False
@@ -182,11 +610,15 @@ class ImgProcess(QWidget):
         self.selected_page1 = None
         self.selected_page2 = None
         self.selected_page3 = None
+        self.is_ffmpeg_install = None
         # 初始化列表
         self.clicked_folder_path = []  
         self.target_folder_titles = []
         self.clicked_folder_names = []
         self.renamed_folders = []
+        self._video_threads = []
+        self.init_logging()
+        logging.info("程序启动")
 
         # 创建一个线程实例
         self.thread = Worker(self)
@@ -930,6 +1362,17 @@ class ImgProcess(QWidget):
         else:
             self.countdown_label.setText(f"{self.remaining_time} 秒后自动归档")
 
+    def init_logging(self):  # 初始化日志
+        handler = RotatingFileHandler(
+            'ImgProcess.log', 
+            maxBytes=5*1024*1024,  # 最大5MB
+            backupCount=1          # 只保留 1 个备份
+        )
+        logging.basicConfig(
+            handlers=[handler],
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
 #############主程序########################################主程序###################################主程序#######################################主程序###############################
 
 
@@ -1098,6 +1541,23 @@ class ImgProcess(QWidget):
             with open(bat_file, "w", encoding="utf-8") as f:
                 f.write(bat_content)
 
+        # 获取 folder_path 的父目录
+        parent_dir = os.path.dirname(folder_path)
+        # 【常用图片】文件夹路径
+        common_img_dir = os.path.join(parent_dir, "常用图片")
+        if os.path.exists(common_img_dir):
+            # 查找【包装袋.jpg】
+            source_file = os.path.join(common_img_dir, "包装袋.jpg")
+     
+            if os.path.exists(source_file):
+                # 构造目标路径
+                dest_file = os.path.join(target_dir, "包装袋.jpg")
+                
+                # 复制文件
+                shutil.copy2(source_file, dest_file)
+                print(f"已复制文件: {source_file} -> {dest_file}")
+                logging.info(f"已复制文件: {source_file} -> {dest_file}")
+
         if success_count > 0:
             QMessageBox.information(self, "提示", f"成功创建 {success_count} 个文件夹。已存在的文件夹被跳过 {skip_count} 个。")
         elif skip_count == num_folders:
@@ -1197,41 +1657,41 @@ class ImgProcess(QWidget):
                 # 继续处理其他的目录 
                 for dir_name in dirs:              
                     # 子文件夹的路径
-                    sub_dir_path = os.path.join(root, dir_name)
+                    self.sub_dir_path = os.path.join(root, dir_name)
                     # 如果"需要复制的图片"文件夹不存在，则创建
                     target_dir = os.path.join(self.dir_path, "图片复制")
                     os.makedirs(target_dir, exist_ok=True)
                     # 如果该子文件夹是目录A的一级子文件夹，则添加到控件中
-                    if os.path.dirname(sub_dir_path) == self.dir_path and sub_dir_path != target_dir:
+                    if os.path.dirname(self.sub_dir_path) == self.dir_path and self.sub_dir_path != target_dir:
                         # 检查子文件夹及其所有子文件夹中是否存在.file_type文件
                         file_type_exist = False
-                        for sub_root, sub_dirs, sub_files in os.walk(sub_dir_path):
+                        for sub_root, sub_dirs, sub_files in os.walk(self.sub_dir_path):
                             if any(f.endswith(file_type) for f in sub_files):
                                 file_type_exist = True
                                 break
 
                         if not file_type_exist:
-                            sub_dir_files = os.listdir(os.path.join(self.parent_dir, sub_dir_path))
+                            sub_dir_files = os.listdir(os.path.join(self.parent_dir, self.sub_dir_path))
                             if any(file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')) for file in sub_dir_files):
                                 try:
-                                    os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "psd"))
-                                    os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "其他尺寸"))
+                                    os.makedirs(os.path.join(self.parent_dir, self.sub_dir_path, "已修", "psd"))
+                                    os.makedirs(os.path.join(self.parent_dir, self.sub_dir_path, "已修", "其他尺寸"))
                                 except:
                                     pass
-                            if os.path.exists(os.path.join(self.parent_dir, sub_dir_path, "待修")):
+                            if os.path.exists(os.path.join(self.parent_dir, self.sub_dir_path, "待修")):
                                 try:
-                                    os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "psd"))
-                                    os.makedirs(os.path.join(self.parent_dir, sub_dir_path, "已修", "其他尺寸"))
+                                    os.makedirs(os.path.join(self.parent_dir, self.sub_dir_path, "已修", "psd"))
+                                    os.makedirs(os.path.join(self.parent_dir, self.sub_dir_path, "已修", "其他尺寸"))
                                 except:
                                     pass
-                                wait_repaire_files = os.listdir(os.path.join(self.parent_dir, sub_dir_path, "待修"))
+                                wait_repaire_files = os.listdir(os.path.join(self.parent_dir, self.sub_dir_path, "待修"))
                                 if not any(file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')) for file in wait_repaire_files):
                                     dir_name = "未选图 " + dir_name
-                            elif os.path.exists(os.path.join(self.parent_dir, sub_dir_path)):
-                                wait_repaire_files = os.listdir(os.path.join(self.parent_dir, sub_dir_path))
+                            elif os.path.exists(os.path.join(self.parent_dir, self.sub_dir_path)):
+                                wait_repaire_files = os.listdir(os.path.join(self.parent_dir, self.sub_dir_path))
                                 for file in wait_repaire_files:
                                     if file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')):
-                                        file_path = os.path.join(self.parent_dir, sub_dir_path, file)
+                                        file_path = os.path.join(self.parent_dir, self.sub_dir_path, file)
                                         with Image.open(file_path) as img:
                                             if img.size[0] > 1800:
                                                 dir_name = "未选图 " + dir_name
@@ -1241,7 +1701,7 @@ class ImgProcess(QWidget):
                             item.setData(Qt.DisplayRole, dir_name)
                             item.setData(Qt.TextColorRole, QColor("#2F857E")) # 设置链接的颜色
                             item.setData(Qt.TextAlignmentRole, Qt.AlignLeft)   # 设置链接的对齐方式
-                            item.setData(Qt.UserRole, os.path.join(self.parent_dir, sub_dir_path))  
+                            item.setData(Qt.UserRole, os.path.join(self.parent_dir, self.sub_dir_path))  
                             self.file_left_list.addItem(item)
                             left_count += 1
 
@@ -1251,7 +1711,7 @@ class ImgProcess(QWidget):
                             item.setData(Qt.DisplayRole, dir_name)
                             item.setData(Qt.TextColorRole, QColor("#39569E")) # 设置链接的颜色
                             item.setData(Qt.TextAlignmentRole, Qt.AlignLeft)   # 设置链接的对齐方式
-                            item.setData(Qt.UserRole, os.path.join(self.parent_dir, sub_dir_path))
+                            item.setData(Qt.UserRole, os.path.join(self.parent_dir, self.sub_dir_path))
                             self.file_right_list.addItem(item)
                             right_count += 1
             
@@ -1370,6 +1830,94 @@ class ImgProcess(QWidget):
         if not os.path.exists(bat_content):
             with open(bat_file, "w", encoding="utf-8") as f:
                 f.write(bat_content)
+
+        # 获取 folder_path 的父目录
+        parent_dir = os.path.dirname(self.dir_path)
+        # 【常用图片】文件夹路径
+        common_img_dir = os.path.join(parent_dir, "常用图片")
+        if os.path.exists(common_img_dir):
+            # 查找【包装袋.jpg】
+            source_file = os.path.join(common_img_dir, "包装袋.jpg")
+     
+            if os.path.exists(source_file):
+                # 构造目标路径
+                dest_file = os.path.join(target_dir, "包装袋.jpg")
+                
+                # 复制文件
+                shutil.copy2(source_file, dest_file)
+                print(f"已复制文件: {source_file} -> {dest_file}")
+                logging.info(f"已复制文件: {source_file} -> {dest_file}")
+        
+        self.start_vedio_processing()
+
+    def start_vedio_processing(self):
+        """开始视频处理"""
+        # 检测是否安装 ffmpeg
+        if not os.path.isfile(FFMPEG_ABSOLUTE_PATH):
+            # 跳出提示：还没安装
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("提示")
+            msg_box.setIcon(QMessageBox.Information)
+            msg_box.setText("检测到视频处理插件 'ffmpeg' 未安装，稍后将自动安装")
+            msg_box.setStandardButtons(QMessageBox.Ok)
+            msg_box.button(QMessageBox.Ok).setText("确定")
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    font-size: 14px;
+                }
+                QPushButton {
+                    min-width: 80px;
+                    padding: 5px;
+                }
+            """)
+            msg_box.exec_()
+
+            # 弹出安装对话框，开始下载安装
+            self.install_dialog = FFmpegInstallDialog(self)
+            self.install_dialog.start_installation()
+            logging.info("检测到ffmpeg未安装，开始安装···")
+        else:
+            # 已经安装了
+            self.is_ffmpeg_install = True
+            self.video_thread_start()
+
+    def ffmpeg_installed(self, success, message):
+        """当 FFmpeg 安装完毕后被调用"""
+        if success:
+            logging.info("ffmpeg安装成功！")
+            # self.close()  # 这会自动触发 closeEvent 并处理关闭逻辑
+
+    def video_thread_start(self):
+        if not self.is_ffmpeg_install:
+            return
+        # 收集所有需要处理的文件夹信息
+        folders_to_process = []
+        for entry in os.scandir(self.dir_path):
+            if entry.is_dir() and entry.name != "图片复制":
+                dir_path = entry.path
+                processed_folder = os.path.join(dir_path, "已修")
+                
+                # 检查目标目录是否已存在MP4文件
+                if not any(fn.lower().endswith('.mp4') for fn in os.listdir(processed_folder)):
+                    folders_to_process.append((dir_path, processed_folder))
+        # 创建单个工作线程处理所有文件夹
+        if folders_to_process:
+            video_thread = VideoWorker(folders_list=folders_to_process)
+            video_thread.finished_signal.connect(self.video_thread_finshed)
+            video_thread.start()
+            self._video_threads.append(video_thread)
+            self.video_work_thread_running = True
+        # 只保留 dir_path 的文件夹名
+        only_folder_names = [os.path.basename(folder[0]) for folder in folders_to_process]
+        print(f"视频待处理文件夹：{only_folder_names}")
+        logging.info(f"视频待处理文件夹：{only_folder_names}")
+
+    def video_thread_finshed(self):
+        self.video_work_thread_running = False
+        print("··················")
+        print("所有视频都已处理完毕")
+        logging.info("··················")
+        logging.info("所有视频都已处理完毕")
 
     def item_double_clicked(self, list_widget):
         if self.expanded and self.y() == self.monitor_top_border - self.margin:
@@ -1623,6 +2171,7 @@ class ImgProcess(QWidget):
                             except Exception as e:
                                 full_path = os.path.join(self.file_path_right, psd_file_name)
                                 print(f"无法处理文件: {psd_file_name} ({full_path})")
+                                logging.info(f"无法处理文件: {psd_file_name} ({full_path})")
                                 self.psd_open_ok = False
                                 break
                     if self.psd_open_ok:
@@ -1709,6 +2258,7 @@ class ImgProcess(QWidget):
                     window.close()
         except Exception as e:
             print(f"An error occurred: {e}")
+            logging.info(f"An error occurred: {e}")
 
 ###FolderFilter#######################################################FolderFilter###################################FolderFilter##################################################### 
 
@@ -1810,27 +2360,33 @@ class ImgProcess(QWidget):
             
     #记录窗口关闭事件
     def closeEvent(self, event):
-        self.expanded = None
-        if self.thread_running:
-            QMessageBox.information(self,'提示','后台正在运行自动归档，请稍后再操作')
+        self.expanded = None 
+        if self.video_work_thread_running:
+            QMessageBox.information(self,'提示','后台正在处理视频，请稍后再操作')
             event.ignore()
             self.expanded = True
             return
-        if self.file_filter_folders_list.count() > 0:
-            self.refresh()
-            self.archive_auarantee()
-            self.auto_archiving()
-            if self.psd_found:
-                self.dialog()
-                self.psd_found = False
-            self.close_folder_windows()
-        # # 保存窗口大小
-        # self.settings.setValue('window_size', self.size())
-        # 在关闭窗口之前等待线程完成
-        self.thread.wait()
-        event.accept()
-        # 调用基类的 closeEvent 方法以关闭窗口
-        super().closeEvent(event)
+        else:
+            if self.thread_running:
+                QMessageBox.information(self,'提示','后台正在自动归档，请稍后再操作')
+                event.ignore()
+                self.expanded = True
+                return       
+            if self.file_filter_folders_list.count() > 0:
+                self.refresh()
+                self.archive_auarantee()
+                self.auto_archiving()
+                if self.psd_found:
+                    self.dialog()
+                    self.psd_found = False
+                self.close_folder_windows()
+            # # 保存窗口大小
+            # self.settings.setValue('window_size', self.size())
+            # 在关闭窗口之前等待线程完成
+            self.thread.wait()
+            event.accept()
+            # 调用基类的 closeEvent 方法以关闭窗口
+            super().closeEvent(event)
 
 #设置全局字体大小
 def set_global_font_size():
