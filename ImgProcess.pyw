@@ -1,3 +1,4 @@
+import ctypes
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -24,6 +25,18 @@ from psd_tools import PSDImage
 # —— 配置 FFmpeg 的绝对路径 —— #
 FFMPEG_ABSOLUTE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
 FFPROBE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffprobe.exe"
+
+def run_as_admin():
+    if ctypes.windll.shell32.IsUserAnAdmin():
+        return  # 已经是管理员，直接运行
+
+    # 重新以管理员身份启动
+    exe = sys.executable
+    params = " ".join(sys.argv)
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, None, 1)
+    sys.exit()  # 退出当前进程，等待新进程执行
+
+run_as_admin()
 
 
 class Worker(QThread):
