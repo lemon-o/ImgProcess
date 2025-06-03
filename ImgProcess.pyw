@@ -562,7 +562,7 @@ exit
             if exit_code == 0:
                 self.status_updated.emit("安装成功！")
                 self.progress_updated.emit(100)
-                self.finished_signal.emit(True, "FFmpeg安装和环境变量配置完成，请重启软件生效")
+                self.finished_signal.emit(True, "FFmpeg安装和环境变量配置完成！")
             else:
                 error_msg = f"添加环境变量失败 (退出代码: {exit_code})"
                 if error.strip():
