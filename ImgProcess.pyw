@@ -14,13 +14,17 @@ import subprocess
 import shutil
 import urllib.request
 import psutil
+import requests
 import pygetwindow as gw
 from PyQt5.QtWidgets import QLabel, QMenu, QMessageBox, QPushButton,  QVBoxLayout, QFileDialog, QListWidget, QListWidgetItem, QLineEdit, QDialog  
-from PyQt5.QtWidgets import QComboBox, QFrame, QStackedWidget, QProgressBar, QApplication, QWidget, QDesktopWidget,QHBoxLayout, QShortcut
-from PyQt5.QtGui import QBrush, QFont, QIcon,QColor,QDesktopServices, QPainter, QKeySequence, QRegExpValidator
-from PyQt5.QtCore import QCoreApplication, QPropertyAnimation, QRect, QSettings,Qt, QUrl, QTimer, QThread, pyqtSignal, QRegExp, QProcess      
+from PyQt5.QtWidgets import QComboBox, QFrame, QStackedWidget, QProgressBar, QApplication, QWidget, QDesktopWidget,QHBoxLayout, QShortcut, QProgressDialog
+from PyQt5.QtGui import QBrush, QFont, QIcon,QColor,QDesktopServices, QPainter, QKeySequence, QRegExpValidator,QCursor, QTextCursor
+from PyQt5.QtCore import QCoreApplication, QPropertyAnimation, QRect, QSettings,Qt, QUrl, QTimer, QThread, pyqtSignal, QRegExp, QProcess, QPoint,QEvent       
 from PIL import Image
 from psd_tools import PSDImage
+
+
+CURRENT_VERSION = "v1.1.0"  #版本号
 
 # —— 配置 FFmpeg 的绝对路径 —— #
 FFMPEG_ABSOLUTE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
@@ -38,7 +42,326 @@ def run_as_admin():
 
 run_as_admin()
 
+#下载更新包线程
+class DownloadThread(QThread):
+    download_progress = pyqtSignal(int, int, str)  # 进度, 已下载大小, 网速字符串
+    download_finished = pyqtSignal(str)
+    download_failed = pyqtSignal(str)
+    message = pyqtSignal(str)
+    
+    def __init__(self, download_url):
+        super().__init__()
+        self.download_url = download_url
+        self.total_size = 0
+        self._is_running = True
+        self._start_time = None
+        self._last_update_time = None
+        self._last_size = 0
+        self._speed_history = []
 
+    def run(self):
+        try:
+            tmp_dir = tempfile.mkdtemp()
+            local_path = os.path.join(tmp_dir, os.path.basename(self.download_url))
+            
+            self.message.emit(f"开始下载: {os.path.basename(self.download_url)}")
+            self._start_time = time.time()
+            self._last_update_time = self._start_time
+            self._last_size = 0
+            
+            with requests.get(self.download_url, stream=True, timeout=30) as r:
+                r.raise_for_status()
+                self.total_size = int(r.headers.get('content-length', 0))
+                downloaded_size = 0
+                
+                with open(local_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if not self._is_running:
+                            os.remove(local_path)
+                            self.message.emit("下载已取消")
+                            return
+                            
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        # 计算实时网速（每100ms更新一次）
+                        current_time = time.time()
+                        if current_time - self._last_update_time >= 0.1:  # 100ms更新频率
+                            elapsed = current_time - self._last_update_time
+                            speed = (downloaded_size - self._last_size) / elapsed  # B/s
+                            
+                            # 平滑处理（最近3次平均值）
+                            self._speed_history.append(speed)
+                            if len(self._speed_history) > 3:
+                                self._speed_history.pop(0)
+                            avg_speed = sum(self._speed_history) / len(self._speed_history)
+                            
+                            # 格式化网速显示
+                            speed_str = self.format_speed(avg_speed)
+                            
+                            progress = int(downloaded_size * 100 / self.total_size) if self.total_size > 0 else 0
+                            self.download_progress.emit(progress, downloaded_size, speed_str)
+                            
+                            self._last_update_time = current_time
+                            self._last_size = downloaded_size
+                
+            self.download_finished.emit(local_path)
+            
+        except Exception as e:
+            self.download_failed.emit(str(e))
+    
+    def format_speed(self, speed_bps):
+        """格式化网速显示"""
+        if speed_bps < 1024:  # <1KB/s
+            return f"{speed_bps:.0f} B/s"
+        elif speed_bps < 1024 * 1024:  # <1MB/s
+            return f"{speed_bps/1024:.1f} KB/s"
+        else:
+            return f"{speed_bps/(1024 * 1024):.1f} MB/s"
+
+class CheckUpdateThread(QThread):
+    update_checked = pyqtSignal(dict, str)  # 传递检查结果和错误信息
+
+    def __init__(self, current_version):
+        super().__init__()
+        self.current_version = current_version
+        self.api_url = "https://api.github.com/repos/lemon-o/ImgProcess/releases/latest"
+
+    def run(self):
+        try:
+            response = requests.get(self.api_url, timeout=10)
+            response.raise_for_status()
+            self.update_checked.emit(response.json(), "")
+        except Exception as e:
+            self.update_checked.emit({}, str(e))
+
+# 检测更新窗口
+class UpdateDialog(QDialog):
+    def __init__(self, parent=None, current_version=""):
+        super().__init__(parent)
+        self.current_version = current_version
+        self.latest_version = ""
+        self.download_url = ""
+        self.setup_ui()
+        self.show()  # 立即显示窗口
+        self.start_check_update()  # 使用专用线程检查更新
+        
+    def setup_ui(self):
+        self.setWindowTitle("检查更新")
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.resize(400, 150)
+        
+        layout = QVBoxLayout()
+        
+        # 标题
+        title_label = QLabel("软件更新")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        
+        # 状态信息
+        self.status_label = QLabel("正在检查更新...")
+        self.status_label.setWordWrap(True)
+        self.status_label.setStyleSheet("""
+            QLabel {
+                font-size: 14px;
+                padding: 10px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                background-color: #f8f9fa;
+                min-height: 40px;
+            }
+        """)
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
+        
+        # 进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.hide()  # 初始隐藏
+        layout.addWidget(self.progress_bar)
+        
+        # 按钮布局 - 只在检查更新窗口显示
+        button_height1 = self.height() // 5
+        button_style = """
+        QPushButton {
+            background-color: #ffffff;
+            color: #3b3b3b;
+            border-radius: 6%; /* 圆角半径使用相对单位，可以根据需要调整 */
+            border: 1px solid #f5f5f5;
+        }
+
+        QPushButton:hover {
+            background-color: #0773fc;
+            color: #ffffff;
+            border: 0.1em solid #0773fc; /* em为相对单位 */
+        }
+
+        QPushButton:disabled {
+            background-color: #f0f0f0;  /* 禁用时的背景色（浅灰色） */
+            color: #a0a0a0;           /* 禁用时的文字颜色（灰色） */
+            border: 1px solid #d0d0d0; /* 禁用时的边框颜色 */
+        }
+        """
+        self.button_layout = QHBoxLayout()
+        self.update_button = QPushButton("更新")
+        self.update_button.setFixedHeight(button_height1)
+        self.update_button.setStyleSheet(button_style)
+        self.update_button.clicked.connect(self.start_update)
+        self.update_button.setEnabled(False)  # 初始不可用
+        self.button_layout.addWidget(self.update_button)
+        
+        self.cancel_button = QPushButton("取消")
+        self.cancel_button.setFixedHeight(button_height1)
+        self.cancel_button.setStyleSheet(button_style)
+        self.cancel_button.clicked.connect(self.close)
+        self.button_layout.addWidget(self.cancel_button)
+        
+        layout.addLayout(self.button_layout)
+        self.setLayout(layout)
+        
+    def start_check_update(self):
+        """启动异步检查更新"""
+        self.status_label.setText("正在检查更新...")
+        self.check_thread = CheckUpdateThread(self.current_version)
+        self.check_thread.update_checked.connect(self.handle_update_result)
+        self.check_thread.start()
+
+    def handle_update_result(self, release_info, error):
+        """处理检查结果"""
+        if error:
+            self.status_label.setText(f"检查失败: {error}")
+            self.cancel_button.setText("关闭")
+            return
+
+        # 解析版本信息
+        self.latest_version = release_info.get("tag_name", "")
+        if not self.latest_version:
+            self.status_label.setText("无法获取版本号")
+            self.cancel_button.setText("关闭")
+            return
+
+        self.status_label.setText(f"当前版本: {self.current_version}\n最新版本: {self.latest_version}")
+
+        if self.latest_version == self.current_version:
+            self.status_label.setText("已经是最新版本")
+            self.cancel_button.setText("关闭")
+            return
+
+        # 获取下载链接
+        assets = release_info.get("assets", [])
+        for asset in assets:
+            name = asset.get("name", "").lower()
+            if name.endswith((".exe", ".zip")):
+                self.download_url = asset.get("browser_download_url")
+                break
+
+        if not self.download_url:
+            self.status_label.setText("未找到可下载的安装文件")
+            self.cancel_button.setText("关闭")
+            return
+
+        # 发现新版本，启用更新按钮
+        self.status_label.setText(f"发现新版本 {self.latest_version}，当前版本{CURRENT_VERSION}")
+        self.update_button.setEnabled(True)
+
+    def start_update(self):
+        """开始下载更新"""
+        if hasattr(self, 'download_url') and self.download_url:
+            # 重置UI状态
+            self.update_button.hide()
+            self.cancel_button.hide()
+            self.progress_bar.show()
+            self.progress_bar.setValue(0)
+            self.status_label.setText("准备下载更新...")
+            
+            # 强制立即更新UI
+            QApplication.processEvents()
+            
+            # 创建下载线程
+            self.download_thread = DownloadThread(self.download_url)
+            
+            # 正确连接所有信号
+            self.download_thread.download_progress.connect(self.handle_download_progress)
+            self.download_thread.download_finished.connect(self.on_download_finished)
+            self.download_thread.download_failed.connect(self.on_download_failed)
+            self.download_thread.message.connect(self.status_label.setText)
+            
+            self.download_thread.start()
+
+    def handle_download_progress(self, progress, downloaded_size, speed_str):
+        """处理下载进度和网速"""
+        # 格式化大小显示
+        def format_size(size):
+            if size < 1024:
+                return f"{size}B"
+            elif size < 1024 * 1024:
+                return f"{size/1024:.1f}KB"
+            else:
+                return f"{size/(1024 * 1024):.1f}MB"
+        
+        # 更新UI
+        total_size = self.download_thread.total_size
+        total_str = format_size(total_size) if total_size > 0 else "未知大小"
+        
+        self.progress_bar.setValue(progress)
+        self.status_label.setText(
+            f"正在下载更新({format_size(downloaded_size)}/{total_str})  {speed_str}"
+        )
+        QApplication.processEvents()
+
+    def on_download_failed(self, error_msg):
+        """下载失败处理"""
+        self.progress_bar.hide()
+        self.status_label.setText(f"下载失败: {error_msg}")
+        # 只显示关闭按钮
+        self.cancel_button.setText("关闭")
+        self.cancel_button.show()
+
+    def on_download_finished(self, local_path):
+        """下载完成处理"""
+        self.status_label.setText("下载完成，准备安装...")
+        self.progress_bar.setValue(100)
+        
+        try:
+            if local_path.endswith(".exe"):
+                # 最小化所有窗口并启动安装程序
+                self.minimize_all_windows()
+                subprocess.Popen(
+                    [local_path], 
+                    shell=True,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                )         
+                
+            elif local_path.endswith(".zip"):
+                self.status_label.setText(f"更新包已下载到: {local_path}")
+                # 只显示关闭按钮
+                self.cancel_button.setText("关闭")
+                self.cancel_button.show()
+                
+        except Exception as e:
+            self.status_label.setText(f"安装失败: {e}")
+            # 只显示关闭按钮
+            self.cancel_button.setText("关闭")
+            self.cancel_button.show()
+
+    def minimize_all_windows(self):
+        """最小化主窗口和所有子窗口"""
+        # 最小化主窗口
+        if self.parent():
+            self.parent().showMinimized()
+        
+        # 最小化所有对话框
+        for window in QApplication.topLevelWidgets():
+            if window.isWindow() and window.isVisible():
+                window.showMinimized()
+
+        # 退出当前实例
+        QApplication.quit()
+
+#图片处理线程
 class Worker(QThread):
     finished_signal = pyqtSignal()
     archiving_thread_start_signal = pyqtSignal()
@@ -175,6 +498,7 @@ class Worker(QThread):
         self.start1 = False            
         self.finished_signal.emit()
 
+#视频处理线程
 class VideoWorker(QThread):
     finished_signal = pyqtSignal()
 
@@ -309,13 +633,14 @@ def kill_ffmpeg_processes():
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
 
+#ffmpeg安装窗口
 class FFmpegInstallDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent  # 保存父窗口引用
         self.setWindowTitle("安装 FFmpeg")
-        self.setGeometry(400, 400, 500, 200)
-        self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.CustomizeWindowHint)
+        self.resize(400, 200)
+        # self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.CustomizeWindowHint)
         
         # 创建布局
         layout = QVBoxLayout()
@@ -396,11 +721,20 @@ class FFmpegInstallDialog(QDialog):
                 self.parent.ffmpeg_installed(False, message)
         # 安装完成后关闭弹窗
         self.close()
-
+        
+# ffmpeg安装线程
 class FFmpegInstallThread(QThread):
     status_updated = pyqtSignal(str)  # 发送状态更新信号
     progress_updated = pyqtSignal(int)  # 发送进度更新
     finished_signal = pyqtSignal(bool, str)  # 发送完成信号(成功/失败, 消息)
+
+    def __init__(self):
+        super().__init__()
+        self._start_time = None
+        self._last_update_time = None
+        self._last_size = 0
+        self._speed_history = []
+        self._is_running = True
 
     def run(self):
         temp_dir = None
@@ -424,6 +758,12 @@ class FFmpegInstallThread(QThread):
             self.status_updated.emit("开始下载FFmpeg...")
             self.progress_updated.emit(20)
             
+            # 初始化下载计时
+            self._start_time = time.time()
+            self._last_update_time = self._start_time
+            self._last_size = 0
+            self._speed_history = []
+            
             # 下载地址
             ffmpeg_urls = [
                 "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
@@ -431,18 +771,39 @@ class FFmpegInstallThread(QThread):
             ]
 
             def update_progress(count, block_size, total_size):
+                if not self._is_running:
+                    raise Exception("下载已取消")
+                
                 if total_size > 0:
                     downloaded = count * block_size
-                    downloaded_mb = downloaded / (1024 * 1024)
-                    total_mb = total_size / (1024 * 1024)
+                    current_time = time.time()
                     
-                    self.status_updated.emit(
-                        f"正在下载FFmpeg...  {total_mb:.1f}MB / {downloaded_mb:.1f}MB"
-                    )
-                    
-                    # 计算进度 (20-80% 用于下载)
-                    progress = 20 + int(60 * downloaded / total_size)
-                    self.progress_updated.emit(min(progress, 80))
+                    # 计算实时网速（每100ms更新一次）
+                    if current_time - self._last_update_time >= 0.1:
+                        elapsed = current_time - self._last_update_time
+                        speed = (downloaded - self._last_size) / elapsed  # B/s
+                        
+                        # 平滑处理（最近3次平均值）
+                        self._speed_history.append(speed)
+                        if len(self._speed_history) > 3:
+                            self._speed_history.pop(0)
+                        avg_speed = sum(self._speed_history) / len(self._speed_history)
+                        
+                        # 格式化显示
+                        downloaded_mb = downloaded / (1024 * 1024)
+                        total_mb = total_size / (1024 * 1024)
+                        speed_str = self.format_speed(avg_speed)
+                        
+                        self.status_updated.emit(
+                            f"正在下载FFmpeg({downloaded_mb:.1f}MB/{total_mb:.1f}MB)  {speed_str}"
+                        )
+                        
+                        # 计算进度 (20-80% 用于下载)
+                        progress = 20 + int(60 * downloaded / total_size)
+                        self.progress_updated.emit(min(progress, 80))
+                        
+                        self._last_update_time = current_time
+                        self._last_size = downloaded
 
             # 尝试多个下载地址
             download_success = False
@@ -580,6 +941,15 @@ exit
                     shutil.rmtree(temp_dir, ignore_errors=True)
                 except Exception:
                     pass
+
+    def format_speed(self, speed_bps):
+        """格式化网速显示"""
+        if speed_bps < 1024:  # <1KB/s
+            return f"{speed_bps:.0f} B/s"
+        elif speed_bps < 1024 * 1024:  # <1MB/s
+            return f"{speed_bps/1024:.1f} KB/s"
+        else:
+            return f"{speed_bps/(1024 * 1024):.1f} MB/s"
 
 class ImgProcess(QWidget):
 
@@ -746,6 +1116,21 @@ class ImgProcess(QWidget):
             }
         """
 
+        self.normal_style = """
+        QPushButton {
+            color: #ffffff;
+            border: 0px;
+        }
+        """
+        self.hover_style = """
+        QPushButton:hover {
+            background-color: #dedfe0;
+            border-radius: 3%;
+            border: 0px;
+        }
+        """
+
+
         self.main_icon = QPushButton()
         self.main_icon.setFixedSize(button_width, button_height)
         self.main_icon.setStyleSheet("border: 0px solid white;")
@@ -782,6 +1167,81 @@ class ImgProcess(QWidget):
         self.dock_button_3 = QPushButton()
         self.setup_button(self.dock_button_3, 2, button_style_dock)
         self.dock_button_3.setIcon(QIcon('./icon/Cmingoz.ico'))  
+
+        # 设置菜单按钮（不绑定样式和页面切换）
+        self.dock_button_menu = QPushButton()
+        self.setup_button(self.dock_button_menu, -1, self.normal_style , is_menu_button=True)
+        self.dock_button_menu.setIcon(QIcon('./icon/menu.png'))  
+        # self.dock_button_menu.clicked.connect(self.show_menu) # 单独绑定菜单点击事件
+
+        # 安装事件过滤器并开启鼠标跟踪
+        self.dock_button_menu.setMouseTracking(True)
+        self.dock_button_menu.installEventFilter(self)
+
+        self.menu = QMenu(self)
+        #让菜单超出主窗口也显示圆角
+        self.menu.setWindowFlags(self.menu.windowFlags() | Qt.FramelessWindowHint)
+        self.menu.setAttribute(Qt.WA_TranslucentBackground)
+        # 基础样式
+        self.menu.setStyleSheet("""
+            QMenu {
+                background-color: white;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 13px;
+            }
+
+            /* 普通状态 */
+            QMenu::item {
+                padding-left: 3px;   /* 靠左显示 */
+                padding-right: 12px;   
+                padding-top: 2px;
+                padding-bottom: 2px;
+                margin: 3px 5px;
+                color: #3b3b3b;
+            }
+
+            /* 悬停状态：保持一致的 padding/margin，防止文字抖动 */
+            QMenu::item:selected {
+                background-color: #dedfe0;
+                border-radius: 4px;
+                padding-left: 3px;
+                padding-right: 12px;
+                padding-top: 2px;
+                padding-bottom: 2px;
+                margin: 3px 5px;
+                color: #3b3b3b;
+            }
+        """)
+
+        # 添加菜单项
+        self.menu.addAction("查看日志").triggered.connect(self.show_log)
+        self.menu.addAction("检查更新").triggered.connect(self.check_update)
+
+        # 安装事件过滤器并开启鼠标跟踪
+        self.menu.setMouseTracking(True)
+        self.menu.installEventFilter(self)
+
+        # 连接 QMenu 的 triggered 信号
+        self.menu.triggered.connect(self._on_menu_triggered)
+
+        # leave_timer：当鼠标完全移出（按钮和菜单区域都不在时），延迟隐藏菜单
+        self.leave_timer = QTimer(self)
+        self.leave_timer.setSingleShot(True)
+        self.leave_timer.timeout.connect(self._try_hide)
+
+        # click_block_timer：短暂屏蔽“菜单立即重现”的定时器（200ms 后重置 just_clicked）
+        self.click_block_timer = QTimer(self)
+        self.click_block_timer.setSingleShot(True)
+        self.click_block_timer.timeout.connect(self._reset_just_clicked)
+
+        # 点击菜单项后短暂禁止重新弹出的标志
+        self.just_clicked = False
+
+        # 在点击菜单项时，除了短时屏蔽 show_menu，还需要永久“去除”对菜单区域的识别，
+        # 直到下一次按钮被移入才恢复。用下面这个标志来控制：
+        self.ignore_menu_area = False
+
         # 上面是自定义标题栏和dock栏 ############################################################
 
 
@@ -1160,21 +1620,27 @@ class ImgProcess(QWidget):
 
         # 创建dock和主窗口水平布局管理器
         hbox_main = QHBoxLayout()
-        hbox_main.addSpacing(self.margin) # 添加（）像素的空白占位 
-        vbox_dock_widget = QWidget() # 创建一个新容器
-        new_width1 = int((5 / 90) * self.fixed_width) # 设置 容器 的宽度
+        hbox_main.addSpacing(self.margin)  # 添加左边距
+        vbox_dock_widget = QWidget()  # 创建一个新容器
+        new_width1 = int((5 / 90) * self.fixed_width)  # 设置容器的宽度
         vbox_dock_widget.setFixedWidth(new_width1)
         vbox_dock = QVBoxLayout(vbox_dock_widget)
         left_margin = int(((5 / 90) * self.fixed_width - self.button_width_dock) // 2)
-        vbox_dock.setContentsMargins(left_margin , 0, 0, 0)  # 调整边距
+        vbox_dock.setContentsMargins(left_margin, 0, 0, 0)  # 调整边距
         vbox_dock.setSpacing(0)  # 设置控件之间的间距为0
+        # 先添加前三个按钮
         vbox_dock.addWidget(self.dock_button_1)  
         vbox_dock.addSpacing(5)
         vbox_dock.addWidget(self.dock_button_2) 
         vbox_dock.addSpacing(5)
         vbox_dock.addWidget(self.dock_button_3) 
         vbox_dock.addSpacing(5)
+        # 添加弹性空间，把菜单按钮推到底部
         vbox_dock.addStretch(1)  
+        # 最后添加菜单按钮，并在底部留 5px 间距
+        vbox_dock.addWidget(self.dock_button_menu) 
+        vbox_dock.addSpacing(10)  # 底部间距
+
         ##### 上面是dock部分 #######
         hbox_main.addWidget(vbox_dock_widget) 
         hbox_main.addWidget(self.stackedWidget) 
@@ -1228,17 +1694,33 @@ class ImgProcess(QWidget):
             self.selected_page3 = True
 
     # 设置dock按钮
-    def setup_button(self, button, index, style):
+    def setup_button(self, button, index, style, is_menu_button=False):
         button.setFixedSize(self.button_width_dock, self.button_height_dock)
         button.setStyleSheet(style)
         button.setCheckable(True)
-        button.clicked.connect(lambda: self.set_button_selected(index))
-        button.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(index)) # 连接切换页面槽函数
+        
+        # 如果是菜单按钮，不绑定 set_button_selected 和 stackedWidget 切换
+        if not is_menu_button:
+            button.clicked.connect(lambda: self.set_button_selected(index))
+            button.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(index))
+
     def set_button_selected(self, index):
-        for btn in self.findChildren(QPushButton):
+        # 获取所有需要管理的按钮（排除菜单按钮）
+        managed_buttons = [
+            self.dock_button_1,
+            self.dock_button_2,
+            self.dock_button_3
+            # 可以继续添加其他需要管理的按钮
+        ]
+        
+        # 重置所有 managed_buttons 的选中状态
+        for btn in managed_buttons:
             btn.setChecked(False)
+        
+        # 设置当前点击的按钮为选中状态
         sender_button = self.sender()
-        sender_button.setChecked(True)
+        if sender_button in managed_buttons:  # 确保是受管理的按钮
+            sender_button.setChecked(True)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1374,18 +1856,200 @@ class ImgProcess(QWidget):
             self.countdown_label.setText(f"{self.remaining_time} 秒后自动归档")
         else:
             self.countdown_label.setText(f"{self.remaining_time} 秒后自动归档")
+    
+    ###########以下是dock区菜单按钮函数
+
+    def _on_menu_triggered(self, action):
+        """
+        只要菜单有一项被点击，就会调用这个槽。
+        1. 把 just_clicked 置为 True，短时（200ms）内不允许重新弹出。
+        2. 同时把 ignore_menu_area 置为 True，直到下一次真正从按钮区触发 show_menu 才将其重置为 False。
+        """
+        # 屏蔽短时重新弹出
+        self.just_clicked = True
+        if self.click_block_timer.isActive():
+            self.click_block_timer.stop()
+        self.click_block_timer.start(200)
+
+        # 去除对菜单区域的识别，直到下一次 show_menu（从按钮触发）时再恢复
+        self.ignore_menu_area = True
+        # 菜单和菜单项重置为初始状态
+        self._hide_menu_and_reset()
+
+    def _reset_just_clicked(self):
+        """200ms 后自动把 just_clicked 置回 False"""
+        self.just_clicked = False
+
+    def show_menu(self):
+
+        # 菜单已经可见时，只停止隐藏定时器，不重复弹出
+        if self.menu.isVisible():
+            self.leave_timer.stop()
+            return
+
+        # “从按钮重新打开菜单”，此时恢复识别菜单区域
+        self.ignore_menu_area = False
+        # 取消任何待执行的隐藏操作
+        self.leave_timer.stop()
+        # 把按钮样式改为 hover 样式
+        self.dock_button_menu.setStyleSheet(self.hover_style)
+
+        # 计算菜单位置
+        button_rect = self.dock_button_menu.rect()
+        button_pos = self.dock_button_menu.mapToGlobal(QPoint(0, 0))
+
+        
+        # 确保菜单已经布局完成，能获取正确高度
+        self.menu.adjustSize()
+        
+        # 计算位置：
+        menu_x = button_pos.x() + button_rect.width() + 10
+        menu_y = button_pos.y() + button_rect.height()/2 - self.menu.sizeHint().height()/2
+        
+        # 显示菜单
+        self.menu.exec_(QPoint(int(menu_x), int(menu_y)))
+
+    def eventFilter(self, obj, event):
+        """
+        重写的事件过滤器：只关心鼠标相关的 Enter/Leave/MouseMove/HoverMove 事件
+        根据 ignore_menu_area 标志，在两个模式之间切换：
+        1) ignore_menu_area == True：只判断“鼠标是否在按钮区域”，忽略菜单区域
+        2) ignore_menu_area == False：同时判断“按钮区域或菜单区域”，按之前逻辑处理
+        """
+        if event.type() in (QEvent.Enter, QEvent.Leave, QEvent.MouseMove, QEvent.HoverMove):
+            cursor_pos = QCursor.pos()
+
+            # 计算按钮在屏幕上的全局矩形
+            btn_top_left = self.dock_button_menu.mapToGlobal(QPoint(0, 0))
+            btn_rect_global = self.dock_button_menu.rect().translated(btn_top_left)
+
+            # 菜单的 geometry() 默认就是全局坐标
+            menu_rect_global = self.menu.geometry()
+
+            # 如果当前只“识别按钮区域”，忽略菜单区域
+            if self.ignore_menu_area:
+                # 如果光标在按钮区域内，就调用 show_menu() 并同时把 ignore_menu_area 设回 False
+                if btn_rect_global.contains(cursor_pos):
+                    # 只有当 just_clicked == False 时才真的弹出
+                    if not self.just_clicked:
+                        self.show_menu()
+                    # 无论如何，短时屏蔽都结束了（因为从按钮区触发打开）
+                    self.just_clicked = False
+                    return super().eventFilter(obj, event)
+                else:
+                    # 光标不在按钮区域内，菜单区也不再被识别
+                    # 如果 menu 仍可见且尚未启动隐藏定时器，才启动延迟隐藏
+                    if self.menu.isVisible() and not self.leave_timer.isActive():
+                        self.leave_timer.start(700)
+                    return super().eventFilter(obj, event)
+
+            # 如果 ignore_menu_area == False，正常“按钮 + 菜单”双区域识别
+            if btn_rect_global.contains(cursor_pos) or menu_rect_global.contains(cursor_pos):
+                # 如果刚点击过菜单项，就先 stop 掉隐藏定时器，但不重复调用 show_menu()
+                if self.just_clicked:
+                    if self.leave_timer.isActive():
+                        self.leave_timer.stop()
+                    return super().eventFilter(obj, event)
+
+                # 菜单可见时只 stop 掉隐藏定时器；不可见时就调用 show_menu() 弹出
+                self.show_menu()
+            else:
+                # 光标移出按钮与菜单区域：如果菜单当前可见且定时器未启动，就启动延迟隐藏
+                if self.menu.isVisible() and not self.leave_timer.isActive():
+                    self.leave_timer.start(700)
+
+        return super().eventFilter(obj, event)
+
+    def _try_hide(self):
+        """
+        leave_timer 超时后再次检查光标位置：
+        如果光标仍不在按钮/菜单区域，就真正隐藏菜单并恢复按钮样式；否则不做任何事。
+        """
+        cursor_pos = QCursor.pos()
+
+        btn_top_left = self.dock_button_menu.mapToGlobal(QPoint(0, 0))
+        btn_rect_global = self.dock_button_menu.rect().translated(btn_top_left)
+        menu_rect_global = self.menu.geometry()
+
+        # 如果光标仍在按钮或菜单区域，就不隐藏
+        if btn_rect_global.contains(cursor_pos) or menu_rect_global.contains(cursor_pos):
+            return
+
+        # 否则，隐藏菜单并恢复按钮正常样式
+        self._hide_menu_and_reset()
+
+    def _hide_menu_and_reset(self):
+        """隐藏菜单并把按钮恢复为 normal 样式（取消 hover）"""
+        self.menu.hide()
+        self.dock_button_menu.setStyleSheet(self.normal_style)
+
+    ###########以上是dock区菜单按钮函数
+
+    #查看日志
+    def show_log(self):
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit
+        import os
+
+        log_path = os.path.join(os.getcwd(), "ImgProcess.log")
+
+        log_window = QDialog(self)
+        log_window.setWindowTitle("日志查看")
+        log_window.setModal(True)
+        log_window.resize(600, 400)
+
+        layout = QVBoxLayout()
+
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setLineWrapMode(QTextEdit.NoWrap)  # 禁止自动换行
+
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except UnicodeDecodeError:
+            with open(log_path, "r", encoding="gbk") as f:
+                content = f.read()
+        except FileNotFoundError:
+            content = "日志文件未找到：ImgProcess.log"
+        except Exception as e:
+            content = f"读取日志出错：{str(e)}"
+
+        text_edit.setText(content)
+
+        # 自动滚动到文本末尾
+        text_edit.moveCursor(QTextCursor.End)
+
+        layout.addWidget(text_edit)
+        log_window.setLayout(layout)
+
+        # 居中显示
+        parent_geom = self.geometry()
+        log_window.move(
+            parent_geom.center().x() - log_window.width() // 2,
+            parent_geom.center().y() - log_window.height() // 2
+        )
+
+        log_window.exec_()
 
     def init_logging(self):  # 初始化日志
         handler = RotatingFileHandler(
-            'ImgProcess.log', 
+            'ImgProcess.log',
             maxBytes=5*1024*1024,  # 最大5MB
-            backupCount=1          # 只保留 1 个备份
+            backupCount=1,         # 只保留 1 个备份
+            encoding='utf-8'       # ✅ 强烈建议添加这一行
         )
         logging.basicConfig(
             handlers=[handler],
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s'
         )
+
+    #检查更新
+    def check_update(self):
+        """显示更新对话框"""
+        dialog = UpdateDialog(self, CURRENT_VERSION)
+        dialog.exec_()
+
 #############主程序########################################主程序###################################主程序#######################################主程序###############################
 
 
@@ -1898,7 +2562,8 @@ class ImgProcess(QWidget):
         """当 FFmpeg 安装完毕后被调用"""
         if success:
             logging.info("ffmpeg安装成功！")
-            # self.close()  # 这会自动触发 closeEvent 并处理关闭逻辑
+            self.is_ffmpeg_install = True
+            self.video_thread_start()
 
     def video_thread_start(self):
         if not self.is_ffmpeg_install:
@@ -1908,11 +2573,14 @@ class ImgProcess(QWidget):
         for entry in os.scandir(self.dir_path):
             if entry.is_dir() and entry.name != "图片复制":
                 dir_path = entry.path
-                processed_folder = os.path.join(dir_path, "已修")
                 
-                # 检查目标目录是否已存在MP4文件
-                if not any(fn.lower().endswith('.mp4') for fn in os.listdir(processed_folder)):
-                    folders_to_process.append((dir_path, processed_folder))
+                # 首先检查主目录(dir_path)中是否有MP4文件
+                if any(fn.lower().endswith('.mp4') for fn in os.listdir(dir_path)):
+                    processed_folder = os.path.join(dir_path, "已修")
+                    
+                    # 然后检查"已修"目录中是否有MP4文件
+                    if os.path.exists(processed_folder) and not any(fn.lower().endswith('.mp4') for fn in os.listdir(processed_folder)):
+                        folders_to_process.append((dir_path, processed_folder))
         # 创建单个工作线程处理所有文件夹
         if folders_to_process:
             video_thread = VideoWorker(folders_list=folders_to_process)
@@ -2398,6 +3066,8 @@ class ImgProcess(QWidget):
             # 在关闭窗口之前等待线程完成
             self.thread.wait()
             event.accept()
+            logging.info("程序关闭")
+            logging.info("----------------------------------------------------------------")
             # 调用基类的 closeEvent 方法以关闭窗口
             super().closeEvent(event)
 
