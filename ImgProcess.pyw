@@ -24,7 +24,7 @@ from PIL import Image
 from psd_tools import PSDImage
 
 
-CURRENT_VERSION = "v1.1.0"  #版本号
+CURRENT_VERSION = "v1.1.1"  #版本号
 
 # —— 配置 FFmpeg 的绝对路径 —— #
 FFMPEG_ABSOLUTE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
@@ -308,7 +308,7 @@ class UpdateDialog(QDialog):
         
         self.progress_bar.setValue(progress)
         self.status_label.setText(
-            f"正在下载更新({format_size(downloaded_size)}/{total_str})  {speed_str}"
+            f"正在下载更新({format_size(downloaded_size)}/{total_str}) | 速度: {speed_str}"
         )
         QApplication.processEvents()
 
@@ -517,7 +517,7 @@ class VideoWorker(QThread):
         video_files = []
         for fn in os.listdir(dir_path):  # 使用传入的 dir_path 参数
             fullp = os.path.join(dir_path, fn)
-            if os.path.isfile(fullp) and fn.lower().endswith(".mp4"):
+            if os.path.isfile(fullp) and fn.lower().endswith((".mp4", ".mov", ".avi", ".mkv", ".flv")):
                 video_files.append((fn, fullp))
 
         # 2. 处理视频文件
@@ -562,7 +562,6 @@ class VideoWorker(QThread):
                 if result.returncode != 0:
                     print(f"[错误] 无法获取视频分辨率（{src_filename}）：{result.stderr.strip()}")
                     logging.info(f"[错误] 无法获取视频分辨率（{src_filename}）：{result.stderr.strip()}")
-                    # 本文件处理失败，但继续处理后续文件
                     continue
 
                 try:
@@ -574,15 +573,11 @@ class VideoWorker(QThread):
                     logging.info(f"[错误] 解析分辨率失败（{src_filename}）：{e}")
                     continue
 
-                # 计算裁剪参数：居中且裁剪为 min_dim×min_dim 的正方形
-                min_dim = min(w, h)
-                x = (w - min_dim) // 2
-                y = (h - min_dim) // 2
-
-                # 用 ffmpeg 裁剪并去除音轨（原处理代码）
+                # 直接让 FFmpeg 计算居中裁剪，不再用 Python 手动算 x/y
                 cmd_crop = [
                     FFMPEG_ABSOLUTE_PATH, "-y", "-i", src_fullpath,
-                    "-vf", f"crop={min_dim}:{min_dim}:{x}:{y}",
+                    # crop=min(iw\,ih):min(iw\,ih):(iw-min(iw\,ih))/2:(ih-min(iw\,ih))/2
+                    "-vf", r"crop=min(iw\,ih):min(iw\,ih):(iw-min(iw\,ih))/2:(ih-min(iw\,ih))/2",
                     "-an",
                     "-c:v", "libx264",
                     "-preset", "medium",
@@ -599,14 +594,14 @@ class VideoWorker(QThread):
                 if proc.returncode != 0:
                     print(f"[错误] ffmpeg 裁剪失败（{src_filename}）：{proc.stderr.strip()}")
                     logging.info(f"[错误] ffmpeg 裁剪失败（{src_filename}）：{proc.stderr.strip()}")
-                    # 本文件处理失败，但继续处理后续文件
-                    # 如果临时文件存在，也可以选择删除或忽略
+                    # 删除残留的临时文件
                     if os.path.exists(temp_output):
                         try:
                             os.remove(temp_output)
                         except:
                             pass
                     continue
+
                 # 处理完毕后强制结束 FFmpeg 进程
                 kill_ffmpeg_processes()
                 # 将生成的临时文件移动到目标目录
@@ -795,7 +790,7 @@ class FFmpegInstallThread(QThread):
                         speed_str = self.format_speed(avg_speed)
                         
                         self.status_updated.emit(
-                            f"正在下载FFmpeg({downloaded_mb:.1f}MB/{total_mb:.1f}MB)  {speed_str}"
+                            f"正在下载FFmpeg({downloaded_mb:.1f}MB/{total_mb:.1f}MB) | 速度: {speed_str}"
                         )
                         
                         # 计算进度 (20-80% 用于下载)
@@ -2575,11 +2570,11 @@ class ImgProcess(QWidget):
                 dir_path = entry.path
                 
                 # 首先检查主目录(dir_path)中是否有MP4文件
-                if any(fn.lower().endswith('.mp4') for fn in os.listdir(dir_path)):
+                if any(fn.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.flv')) for fn in os.listdir(dir_path)):
                     processed_folder = os.path.join(dir_path, "已修")
                     
                     # 然后检查"已修"目录中是否有MP4文件
-                    if os.path.exists(processed_folder) and not any(fn.lower().endswith('.mp4') for fn in os.listdir(processed_folder)):
+                    if os.path.exists(processed_folder) and not any(fn.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.flv')) for fn in os.listdir(processed_folder)):
                         folders_to_process.append((dir_path, processed_folder))
         # 创建单个工作线程处理所有文件夹
         if folders_to_process:
