@@ -24,7 +24,7 @@ from PIL import Image
 from psd_tools import PSDImage
 
 
-CURRENT_VERSION = "v1.1.1"  #版本号
+CURRENT_VERSION = "v1.1.2"  #版本号
 
 # —— 配置 FFmpeg 的绝对路径 —— #
 FFMPEG_ABSOLUTE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
@@ -34,11 +34,18 @@ def run_as_admin():
     if ctypes.windll.shell32.IsUserAnAdmin():
         return  # 已经是管理员，直接运行
 
-    # 重新以管理员身份启动
-    exe = sys.executable
-    params = " ".join(sys.argv)
-    ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, None, 1)
-    sys.exit()  # 退出当前进程，等待新进程执行
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+        
+    QMessageBox.information(
+        None,
+        "提示",
+        "请以管理员身份启动本程序\n\n"
+        "1、右键程序图标→【属性】→【兼容性】\n"
+        "2、勾选【以管理员身份运行此程序】→【确定】"
+    )
+    sys.exit()
 
 run_as_admin()
 
