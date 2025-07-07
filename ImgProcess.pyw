@@ -1,5 +1,6 @@
 import ctypes
 import logging
+logging.getLogger("psd_tools").setLevel(logging.ERROR)
 from logging.handlers import RotatingFileHandler
 import os
 import shutil
@@ -24,7 +25,7 @@ from PIL import Image
 from psd_tools import PSDImage
 
 
-CURRENT_VERSION = "v1.1.2"  #版本号
+CURRENT_VERSION = "v1.1.3"  #版本号
 
 # —— 配置 FFmpeg 的绝对路径 —— #
 FFMPEG_ABSOLUTE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
@@ -413,14 +414,14 @@ class Worker(QThread):
                         jpg_file_name = os.path.splitext(file_name)[0] + ".jpg"
                         jpg_path = os.path.join(self.right_list_path, "已修", jpg_file_name)
                         psd = PSDImage.open(os.path.join(self.file_path_right, file_name))
-                        image = psd.compose()
+                        image = psd.composite()
                         # 将 RGBA 转换为 RGB
                         if image.mode == "RGBA":
                             image = image.convert("RGB")
                         image.save(jpg_path, "JPEG")
 
-                        # 复制到“其他尺寸”文件夹
-                        other_sizes_path = os.path.join(self.file_path_right, "其他尺寸")
+                        # 复制到“1340x1785”文件夹
+                        other_sizes_path = os.path.join(self.file_path_right, "1340x1785")
                         if not os.path.exists(other_sizes_path):
                             os.makedirs(other_sizes_path)
                         shutil.copy(jpg_path, os.path.join(other_sizes_path, jpg_file_name))
@@ -436,7 +437,7 @@ class Worker(QThread):
                         # 处理事件队列，确保及时更新UI
                         QCoreApplication.processEvents()
 
-                        # 裁剪图片为方图（不包括“其他尺寸”里的图片）
+                        # 裁剪图片为方图（不包括“1340x1785”里的图片）
                         img = Image.open(jpg_path)
                         width, height = img.size
                         # 以宽度为基准裁剪成方图
@@ -453,6 +454,9 @@ class Worker(QThread):
 
                         cropped_img = img.crop((left, top, right, bottom))
                         cropped_img.save(jpg_path)
+
+                        print(f"[完成] 图片导出成功: {jpg_file_name}")
+                        logging.info(f"[完成] 图片导出成功: {jpg_file_name}")
 
                     except Exception as e:
                         full_path = os.path.join(self.file_path_right, file_name)
@@ -522,7 +526,7 @@ class VideoWorker(QThread):
     def process_folder(self, dir_path, file_path):
         # 1. 收集原始视频文件
         video_files = []
-        for fn in os.listdir(dir_path):  # 使用传入的 dir_path 参数
+        for fn in os.listdir(dir_path):
             fullp = os.path.join(dir_path, fn)
             if os.path.isfile(fullp) and fn.lower().endswith((".mp4", ".mov", ".avi", ".mkv", ".flv")):
                 video_files.append((fn, fullp))
@@ -533,24 +537,24 @@ class VideoWorker(QThread):
                 print(f"正在处理视频: {src_filename}")
                 logging.info(f"正在处理视频: {src_filename}")
 
-                # 构造输出文件名（在原名后面加后缀 "_cropped"）
                 name_no_ext, ext = os.path.splitext(src_filename)
-                new_filename = f"{name_no_ext}_cropped{ext}"
-                temp_output = os.path.join(dir_path, new_filename)  # 使用传入的 dir_path
-                final_output = os.path.join(file_path, new_filename)  # 使用传入的 file_path
 
-                # 如果输出文件名已存在，则添加数字后缀
+                # 输出文件：1:1
+                new_filename = f"{name_no_ext}_cropped{ext}"
+                temp_output = os.path.join(dir_path, new_filename)
+                final_output = os.path.join(file_path, new_filename)
+
                 if os.path.exists(temp_output):
                     counter = 1
                     while True:
                         new_filename = f"{name_no_ext}_cropped_{counter}{ext}"
                         temp_output = os.path.join(dir_path, new_filename)
                         final_output = os.path.join(file_path, new_filename)
-                        if not os.path.exists(temp_output):  # 确保找到不存在的文件名
+                        if not os.path.exists(temp_output):
                             break
                         counter += 1
-                
-                # 用 ffprobe 获取视频宽高
+
+                # 获取视频分辨率
                 cmd_probe = [
                     FFPROBE_PATH, "-v", "error",
                     "-select_streams", "v:0",
@@ -580,10 +584,9 @@ class VideoWorker(QThread):
                     logging.info(f"[错误] 解析分辨率失败（{src_filename}）：{e}")
                     continue
 
-                # 直接让 FFmpeg 计算居中裁剪，不再用 Python 手动算 x/y
+                # 裁剪为 1:1 正方形
                 cmd_crop = [
                     FFMPEG_ABSOLUTE_PATH, "-y", "-i", src_fullpath,
-                    # crop=min(iw\,ih):min(iw\,ih):(iw-min(iw\,ih))/2:(ih-min(iw\,ih))/2
                     "-vf", r"crop=min(iw\,ih):min(iw\,ih):(iw-min(iw\,ih))/2:(ih-min(iw\,ih))/2",
                     "-an",
                     "-c:v", "libx264",
@@ -599,9 +602,8 @@ class VideoWorker(QThread):
                     creationflags=subprocess.CREATE_NO_WINDOW
                 )
                 if proc.returncode != 0:
-                    print(f"[错误] ffmpeg 裁剪失败（{src_filename}）：{proc.stderr.strip()}")
-                    logging.info(f"[错误] ffmpeg 裁剪失败（{src_filename}）：{proc.stderr.strip()}")
-                    # 删除残留的临时文件
+                    print(f"[错误] ffmpeg 1:1裁剪失败（{src_filename}）：{proc.stderr.strip()}")
+                    logging.info(f"[错误] ffmpeg 1:1裁剪失败（{src_filename}）：{proc.stderr.strip()}")
                     if os.path.exists(temp_output):
                         try:
                             os.remove(temp_output)
@@ -609,23 +611,87 @@ class VideoWorker(QThread):
                             pass
                     continue
 
-                # 处理完毕后强制结束 FFmpeg 进程
+                # 强制结束 FFmpeg
                 kill_ffmpeg_processes()
-                # 将生成的临时文件移动到目标目录
+
+                # 移动 1:1 裁剪结果
                 try:
                     shutil.move(temp_output, final_output)
-                    print(f"[完成] 视频已处理并移动：{final_output}")
-                    logging.info(f"[完成] 视频已处理并移动：{final_output}")
+                    print(f"[完成] 1:1视频已处理并移动：{final_output}")
+                    logging.info(f"[完成] 1:1视频已处理并移动：{final_output}")
                 except Exception as e:
                     print(f"[错误] 移动文件时异常（{temp_output} → {final_output}）：{e}")
                     logging.info(f"[错误] 移动文件时异常（{temp_output} → {final_output}）：{e}")
-                    # 如果移动失败，可考虑删除残留的 temp_output
                     if os.path.exists(temp_output):
                         try:
                             os.remove(temp_output)
                         except:
                             pass
                     continue
+
+                # ========= 新增：裁剪为 3:4 =========
+                new_filename_34 = f"{name_no_ext}_cropped_3x4{ext}"
+                temp_output_34 = os.path.join(dir_path, new_filename_34)
+                # 创建子文件夹 "1340x1785"
+                subfolder_34 = os.path.join(file_path, "1340x1785")
+                os.makedirs(subfolder_34, exist_ok=True)
+                final_output_34 = os.path.join(subfolder_34, new_filename_34)
+
+                if os.path.exists(temp_output_34):
+                    counter = 1
+                    while True:
+                        new_filename_34 = f"{name_no_ext}_cropped_3x4_{counter}{ext}"
+                        temp_output_34 = os.path.join(dir_path, new_filename_34)
+                        final_output_34 = os.path.join(file_path, new_filename_34)
+                        if not os.path.exists(temp_output_34):
+                            break
+                        counter += 1
+
+                # 裁剪表达式根据宽高判断
+                if h * 3 >= w * 4:
+                    crop_w_expr = "iw"
+                    crop_h_expr = "iw*4/3"
+                else:
+                    crop_w_expr = "ih*3/4"
+                    crop_h_expr = "ih"
+
+                cmd_crop_34 = [
+                    FFMPEG_ABSOLUTE_PATH, "-y", "-i", src_fullpath,
+                    "-vf", f"crop={crop_w_expr}:{crop_h_expr}:(iw-{crop_w_expr})/2:(ih-{crop_h_expr})/2",
+                    "-an",
+                    "-c:v", "libx264",
+                    "-preset", "medium",
+                    temp_output_34
+                ]
+                proc_34 = subprocess.run(
+                    cmd_crop_34,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='ignore',
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                if proc_34.returncode != 0:
+                    print(f"[错误] ffmpeg 裁剪 3:4 失败（{src_filename}）：{proc_34.stderr.strip()}")
+                    logging.info(f"[错误] ffmpeg 裁剪 3:4 失败（{src_filename}）：{proc_34.stderr.strip()}")
+                    if os.path.exists(temp_output_34):
+                        try:
+                            os.remove(temp_output_34)
+                        except:
+                            pass
+                else:
+                    try:
+                        shutil.move(temp_output_34, final_output_34)
+                        print(f"[完成] 视频 3:4 已处理并移动：{final_output_34}")
+                        logging.info(f"[完成] 视频 3:4 已处理并移动：{final_output_34}")
+                    except Exception as e:
+                        print(f"[错误] 移动 3:4 文件异常（{temp_output_34} → {final_output_34}）：{e}")
+                        logging.info(f"[错误] 移动 3:4 文件异常（{temp_output_34} → {final_output_34}）：{e}")
+                        if os.path.exists(temp_output_34):
+                            try:
+                                os.remove(temp_output_34)
+                            except:
+                                pass
 
 def kill_ffmpeg_processes():
     for proc in psutil.process_iter(['pid', 'name']):
@@ -1190,7 +1256,7 @@ class ImgProcess(QWidget):
                 background-color: white;
                 border: 1px solid #ddd;
                 border-radius: 4px;
-                font-size: 13px;
+                font-size: 15px;
             }
 
             /* 普通状态 */
@@ -1401,7 +1467,7 @@ class ImgProcess(QWidget):
         # 创建一个定时器对象
         self.timer = QTimer()
         self.countdown_label = QLabel(self)
-        self.countdown_label.setText("90 秒后自动归档")
+        self.countdown_label.setText("90 秒后自动导出图片")
         self.countdown_label.setStyleSheet("color: #3b3b3b; margin-top: 10px; margin-bottom: 0px; margin-left: 0px; color: rgba(0, 0, 0, 0.1);")
 
         #创建进度条
@@ -1855,9 +1921,9 @@ class ImgProcess(QWidget):
             self.auto_archiving()
             # 重置倒计时时间
             self.remaining_time = 90
-            self.countdown_label.setText(f"{self.remaining_time} 秒后自动归档")
+            self.countdown_label.setText(f"{self.remaining_time} 秒后自动导出图片")
         else:
-            self.countdown_label.setText(f"{self.remaining_time} 秒后自动归档")
+            self.countdown_label.setText(f"{self.remaining_time} 秒后自动导出图片")
     
     ###########以下是dock区菜单按钮函数
 
@@ -2107,7 +2173,7 @@ class ImgProcess(QWidget):
                     os.makedirs(subfolder2_path)
                     subfolder3_path = os.path.join(subfolder2_path, "psd")
                     os.makedirs(subfolder3_path)
-                    subfolder4_path = os.path.join(subfolder2_path, "其他尺寸")
+                    subfolder4_path = os.path.join(subfolder2_path, "1340x1785")
                     os.makedirs(subfolder4_path)
                     success_count += 1
                 except:
@@ -2128,7 +2194,7 @@ class ImgProcess(QWidget):
                     os.makedirs(subfolder2_path)
                     subfolder3_path = os.path.join(subfolder2_path, "psd")
                     os.makedirs(subfolder3_path)
-                    subfolder4_path = os.path.join(subfolder2_path, "其他尺寸")
+                    subfolder4_path = os.path.join(subfolder2_path, "1340x1785")
                     os.makedirs(subfolder4_path)
                     success_count += 1
                 except:
@@ -2252,7 +2318,7 @@ class ImgProcess(QWidget):
         self.expanded = None
         self.clear_list_flag = True #不清空时选择的文件夹时候用的
         if self.thread_running:
-            QMessageBox.information(self,'提示','后台正在运行自动归档，请稍后再操作')
+            QMessageBox.information(self,'提示','后台正在运行自动导出图片，请稍后再操作')
             return
         # 获取用户输入的文件类型
         file_type = self.filter_combo.currentText()        
@@ -2354,13 +2420,13 @@ class ImgProcess(QWidget):
                             if any(file.lower().endswith(('.jpg', '.jpeg', '.png', '.raw', '.bmp', '.gif')) for file in sub_dir_files):
                                 try:
                                     os.makedirs(os.path.join(self.parent_dir, self.sub_dir_path, "已修", "psd"))
-                                    os.makedirs(os.path.join(self.parent_dir, self.sub_dir_path, "已修", "其他尺寸"))
+                                    os.makedirs(os.path.join(self.parent_dir, self.sub_dir_path, "已修", "1340x1785"))
                                 except:
                                     pass
                             if os.path.exists(os.path.join(self.parent_dir, self.sub_dir_path, "待修")):
                                 try:
                                     os.makedirs(os.path.join(self.parent_dir, self.sub_dir_path, "已修", "psd"))
-                                    os.makedirs(os.path.join(self.parent_dir, self.sub_dir_path, "已修", "其他尺寸"))
+                                    os.makedirs(os.path.join(self.parent_dir, self.sub_dir_path, "已修", "1340x1785"))
                                 except:
                                     pass
                                 wait_repaire_files = os.listdir(os.path.join(self.parent_dir, self.sub_dir_path, "待修"))
@@ -2585,11 +2651,11 @@ class ImgProcess(QWidget):
                         folders_to_process.append((dir_path, processed_folder))
         # 创建单个工作线程处理所有文件夹
         if folders_to_process:
+            self.video_work_thread_running = True
             video_thread = VideoWorker(folders_list=folders_to_process)
             video_thread.finished_signal.connect(self.video_thread_finshed)
             video_thread.start()
             self._video_threads.append(video_thread)
-            self.video_work_thread_running = True
         # 只保留 dir_path 的文件夹名
         only_folder_names = [os.path.basename(folder[0]) for folder in folders_to_process]
         print(f"视频待处理文件夹：{only_folder_names}")
@@ -2716,7 +2782,7 @@ class ImgProcess(QWidget):
             self.expanded = True
             return
         if self.thread_running:
-            QMessageBox.information(self,'提示','后台正在运行自动归档，请稍后再操作')
+            QMessageBox.information(self,'提示','后台正在运行自动导出图片，请稍后再操作')
             self.expanded = True
             return
         if self.file_filter_folders_list.count() > 0:
@@ -2750,7 +2816,7 @@ class ImgProcess(QWidget):
         self.remaining_time = 90
         self.countdown_timer.stop()
         # 更新倒计时标签
-        self.countdown_label.setText(f"{self.remaining_time} 秒后自动归档")
+        self.countdown_label.setText(f"{self.remaining_time} 秒后自动导出图片")
         self.expanded = True
 
     #刷新按钮配置
@@ -2799,10 +2865,10 @@ class ImgProcess(QWidget):
         self.clicked_folder_path = []
         self.clicked_folder_names = []
         self.expanded = True
-        # 设置倒计时时间以快速启动归档
+        # 设置倒计时时间以快速启动导出图片
         self.remaining_time = 4
 
-    #自动归档
+    #自动导出图片
     def auto_archiving(self):
         if self.thread_running:
             return
@@ -2828,7 +2894,7 @@ class ImgProcess(QWidget):
                         self.psd_found = True
                         self.thread_running = True
                         return 
-    #归档线程完成信号        
+    #导出图片线程完成信号        
     def thread_finished(self):
         self.thread_running = False
 
@@ -2884,7 +2950,7 @@ class ImgProcess(QWidget):
     #     window_size = self.settings.value('window_size', QtCore.QSize(512, 512))
     #     self.resize(window_size)
 
-    #归档提示框
+    #导出图片提示框
     def dialog(self):
         self.expanded = None
         timer_timeout = False
@@ -2907,13 +2973,13 @@ class ImgProcess(QWidget):
             current_time = time.time()
             # 判断是否在0.5秒内执行过更新
             if current_time - last_update_time >= 0.5:
-                dialog.setText(f"正在归档 {value}%")
+                dialog.setText(f"正在导出图片 {value}%")
                 last_update_time = current_time
             if value == 100:
-                dialog.setText(f"正在归档 {value}%")         
+                dialog.setText(f"正在导出图片 {value}%")         
         dialog = QMessageBox(self)
         dialog.setWindowTitle("提示")
-        dialog.setText("正在归档 0%")
+        dialog.setText("正在导出图片 0%")
         dialog.setStandardButtons(QMessageBox.NoButton)
         dialog.setIcon(QMessageBox.Information)
         # 连接到进度更新信号，直接在这里处理进度更新
@@ -3051,7 +3117,7 @@ class ImgProcess(QWidget):
             return
         else:
             if self.thread_running:
-                QMessageBox.information(self,'提示','后台正在自动归档，请稍后再操作')
+                QMessageBox.information(self,'提示','后台正在自动导出图片，请稍后再操作')
                 event.ignore()
                 self.expanded = True
                 return       
