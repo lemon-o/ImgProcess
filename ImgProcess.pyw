@@ -25,7 +25,7 @@ from PIL import Image
 from psd_tools import PSDImage
 
 
-CURRENT_VERSION = "v1.1.3"  #版本号
+CURRENT_VERSION = "v1.1.4"  #版本号
 
 # —— 配置 FFmpeg 的绝对路径 —— #
 FFMPEG_ABSOLUTE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
@@ -161,13 +161,7 @@ class UpdateDialog(QDialog):
         
         layout = QVBoxLayout()
         
-        # 标题
-        title_label = QLabel("软件更新")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
-        title_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title_label)
-        
-        
+
         # 状态信息
         self.status_label = QLabel("正在检查更新...")
         self.status_label.setWordWrap(True)
@@ -2167,19 +2161,25 @@ class ImgProcess(QWidget):
                     continue
                 try:
                     os.makedirs(folder_path_i)
+                    
+                    # 创建子文件夹
                     subfolder1_path = os.path.join(folder_path_i, "待修")
                     os.makedirs(subfolder1_path)
+
+                    subfolder_shoot_record = os.path.join(folder_path_i, "1_拍摄过程记录")
+                    os.makedirs(subfolder_shoot_record)
+
                     subfolder2_path = os.path.join(folder_path_i, "已修")
                     os.makedirs(subfolder2_path)
                     subfolder3_path = os.path.join(subfolder2_path, "psd")
                     os.makedirs(subfolder3_path)
                     subfolder4_path = os.path.join(subfolder2_path, "1340x1785")
                     os.makedirs(subfolder4_path)
+
                     success_count += 1
                 except:
                     pass
         else:
-            # 如果文件夹名称末尾没有数字，则在最后一个文字后面从0开始依次递增
             for i in range(num_folders):
                 current_folder_name = f"{folder_name}{i}"
                 folder_path_i = os.path.join(folder_path, current_folder_name)
@@ -2188,18 +2188,26 @@ class ImgProcess(QWidget):
                     continue
                 try:
                     os.makedirs(folder_path_i)
+
+                    # 创建子文件夹
                     subfolder1_path = os.path.join(folder_path_i, "待修")
                     os.makedirs(subfolder1_path)
+
+                    subfolder_shoot_record = os.path.join(folder_path_i, "1_拍摄过程记录")
+                    os.makedirs(subfolder_shoot_record)
+
                     subfolder2_path = os.path.join(folder_path_i, "已修")
                     os.makedirs(subfolder2_path)
                     subfolder3_path = os.path.join(subfolder2_path, "psd")
                     os.makedirs(subfolder3_path)
                     subfolder4_path = os.path.join(subfolder2_path, "1340x1785")
                     os.makedirs(subfolder4_path)
+
                     success_count += 1
                 except:
                     pass
-        # 同时创建一个名为"需要复制的图片"的文件夹
+
+        # 同时创建一个名为"图片复制"的文件夹
         target_dir = os.path.join(folder_path, "图片复制")
         os.makedirs(target_dir, exist_ok=True)
 
@@ -3079,12 +3087,7 @@ class ImgProcess(QWidget):
             clipboard = QApplication.clipboard()
             result = self.cmin_result.text()
             clipboard.setText(result)
-            msg = QMessageBox(self)
-            msg.setIcon(QMessageBox.Information) 
-            msg.setWindowTitle("提示")
-            msg.setText("复制成功! 将重置此换算。")
-            QTimer.singleShot(1500, msg.close) 
-            msg.exec_()
+            self.show_small_tooltip(self, "✓\n已复制")
             self.cm_input.clear()
             self.in_input.clear()
         
@@ -3096,14 +3099,36 @@ class ImgProcess(QWidget):
             clipboard = QApplication.clipboard()
             result = self.goz_result.text()
             clipboard.setText(result)
-            msg = QMessageBox(self)
-            msg.setIcon(QMessageBox.Information) 
-            msg.setWindowTitle("提示")
-            msg.setText("复制成功! 将重置此换算。")
-            QTimer.singleShot(1500, msg.close) 
-            msg.exec_()
+            self.show_small_tooltip(self, "✓\n已复制")
             self.g_input.clear()
             self.oz_input.clear()
+
+    def show_small_tooltip(self, parent, text):
+        """显示小提示"""
+        tooltip = QLabel(parent)
+        tooltip.setAlignment(Qt.AlignCenter)
+        tooltip.setStyleSheet("""
+            QLabel {
+                background-color: rgba(200, 200, 200, 150);
+                border-radius: 10px;
+                padding: 10px;
+                font: bold 16px;
+                color: #3b3b3b;
+                min-width: 70px;
+                min-height: 70px;
+            }
+        """)
+        tooltip.setText(text)
+        tooltip.adjustSize()
+        
+        # 居中显示
+        x = (parent.width() - tooltip.width()) // 2
+        y = (parent.height() - tooltip.height()) // 2
+        tooltip.move(x, y)
+        tooltip.show()
+        
+        # 2秒后自动消失
+        QTimer.singleShot(2000, tooltip.deleteLater)
 ###Cmingoz#######################################################Cmingoz###################################Cmingoz#####################################################  
             
             
