@@ -17,38 +17,22 @@ import urllib.request
 import psutil
 import requests
 import pygetwindow as gw
-from PyQt5.QtWidgets import QLabel, QMenu, QMessageBox, QPushButton,  QVBoxLayout, QFileDialog, QListWidget, QListWidgetItem, QLineEdit, QDialog  
-from PyQt5.QtWidgets import QComboBox, QFrame, QStackedWidget, QProgressBar, QApplication, QWidget, QDesktopWidget,QHBoxLayout, QShortcut, QProgressDialog
-from PyQt5.QtGui import QBrush, QFont, QIcon,QColor,QDesktopServices, QPainter, QKeySequence, QRegExpValidator,QCursor, QTextCursor
-from PyQt5.QtCore import QCoreApplication, QPropertyAnimation, QRect, QSettings,Qt, QUrl, QTimer, QThread, pyqtSignal, QRegExp, QProcess, QPoint,QEvent       
+from PyQt5.QtWidgets import *
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
 from PIL import Image
 from psd_tools import PSDImage
+from pathlib import Path
 
 
-CURRENT_VERSION = "v1.1.4"  #版本号
+CURRENT_VERSION = "v1.1.5"  #版本号
+
+BASE_DIR = Path(os.getenv("LOCALAPPDATA")) / "ImgProcess"
+BASE_DIR.mkdir(parents=True, exist_ok=True)
 
 # —— 配置 FFmpeg 的绝对路径 —— #
 FFMPEG_ABSOLUTE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
 FFPROBE_PATH = r"C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffprobe.exe"
-
-def run_as_admin():
-    if ctypes.windll.shell32.IsUserAnAdmin():
-        return  # 已经是管理员，直接运行
-
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-        
-    QMessageBox.information(
-        None,
-        "提示",
-        "请以管理员身份启动本程序\n\n"
-        "1、右键程序图标→【属性】→【兼容性】\n"
-        "2、勾选【以管理员身份运行此程序】→【确定】"
-    )
-    sys.exit()
-
-run_as_admin()
 
 #下载更新包线程
 class DownloadThread(QThread):
@@ -1013,6 +997,7 @@ exit
         else:
             return f"{speed_bps/(1024 * 1024):.1f} MB/s"
 
+#主窗口/主程序/主线程
 class ImgProcess(QWidget):
 
     def __init__(self):
@@ -1078,40 +1063,27 @@ class ImgProcess(QWidget):
         # self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding) # 设置大小策略
         # 窗口始终在最顶层&去除默认标题栏
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        # 获取显示器宽高
-        screen = QDesktopWidget().screenGeometry()
-        self.screen_height = screen.height()
-        self.screen_width = screen.width()
-        #设置窗口大小
-        if 1000 <= self.screen_height <= 1200:
-            self.fixed_height = 430
-            self.fixed_width = 600
-        elif 1300 <= self.screen_height <= 1500:
-            self.fixed_height = 500
-            self.fixed_width = 680
-        elif 2000 <= self.screen_height <= 2200:
-            self.fixed_height = 700
-            self.fixed_width = 1000
-        else:
-            if self.screen_height > self.screen_width:
-                if 1000 <= self.screen_width <= 1200:
-                    self.fixed_height = 430
-                    self.fixed_width = 600
-                elif 1300 <= self.screen_width <= 1500:
-                    self.fixed_height = 500
-                    self.fixed_width = 680
-                elif 2000 <= self.screen_width <= 2200:
-                    self.fixed_height = 700
-                    self.fixed_width = 1000 
-            else:
-                self.fixed_height = int((45 / 108) * screen.height())
-                self.fixed_width = int((65 / 192) * screen.width())  
-        self.setGeometry(100, 100, self.fixed_width, self.fixed_height)
+
+        # 获取屏幕尺寸
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.geometry()
+        screen_width = screen_geometry.width()
+        screen_height = screen_geometry.height()
+        
+        # 计算窗口大小
+        window_width = int(screen_width / 4)
+        window_height = int(screen_height / 3)
+        
+        # 设置窗口大小
+        self.resize(window_width, window_height)
+        self.fixed_height = window_height
+        self.fixed_width = window_width
+
         # 窗口默认居中
-        size = self.geometry()
-        x = int((screen.width() - size.width()) / 2)
-        y = int((screen.height() - size.height()) / 2)
+        x = int((screen_width - window_width) / 2)
+        y = int((screen_height - window_height) / 2)
         self.move(x, y)
+        
         #设置缩进边距这样才能绘制窗口投影
         self.margin = round((5 / 430) * self.fixed_height)
         #设置窗口图标
@@ -1255,10 +1227,10 @@ class ImgProcess(QWidget):
 
             /* 普通状态 */
             QMenu::item {
-                padding-left: 3px;   /* 靠左显示 */
-                padding-right: 12px;   
-                padding-top: 2px;
-                padding-bottom: 2px;
+                padding-left: 12px;   /* 靠左显示 */
+                padding-right: 24px;   
+                padding-top: 6px;
+                padding-bottom: 6px;
                 margin: 3px 5px;
                 color: #3b3b3b;
             }
@@ -1267,10 +1239,10 @@ class ImgProcess(QWidget):
             QMenu::item:selected {
                 background-color: #dedfe0;
                 border-radius: 4px;
-                padding-left: 3px;
-                padding-right: 12px;
-                padding-top: 2px;
-                padding-bottom: 2px;
+                padding-left:12px;
+                padding-right: 24px;
+                padding-top: 6px;
+                padding-bottom: 6px;
                 margin: 3px 5px;
                 color: #3b3b3b;
             }
@@ -1278,6 +1250,7 @@ class ImgProcess(QWidget):
 
         # 添加菜单项
         self.menu.addAction("查看日志").triggered.connect(self.show_log)
+        self.menu.addSeparator()
         self.menu.addAction("检查更新").triggered.connect(self.check_update)
 
         # 安装事件过滤器并开启鼠标跟踪
@@ -1327,7 +1300,7 @@ class ImgProcess(QWidget):
         self.folder_name_entry.setStyleSheet(linedit_style_1)
         #创建按钮
         button_height_build = int((30 / 450) * self.fixed_height)
-        button_style_build = """
+        button_style_select_path = """
         QPushButton {
             background-color: #f5f5f5;
             color: #3b3b3b;
@@ -1342,8 +1315,9 @@ class ImgProcess(QWidget):
         }
         """
         self.select_path_button = QPushButton("创建文件夹")
+        self.select_path_button.setStyleSheet(button_style_select_path)
         self.select_path_button.setFixedHeight(button_height_build)
-        self.select_path_button.setStyleSheet(button_style_build)
+        self.select_path_button.setMinimumHeight(36)
         self.select_path_button.clicked.connect(self.select_path)
 
         # 创建子界面布局管理器
@@ -1374,16 +1348,20 @@ class ImgProcess(QWidget):
         button_height1 = int((30 / 450) * self.fixed_height)
         button_style = """
         QPushButton {
-            background-color: #f5f5f5;
-            color: #3b3b3b;
+            background-color: #0773fc;
+            color: #ffffff;
             border-radius: 6%; /* 圆角半径使用相对单位，可以根据需要调整 */
-            border: 1px solid #f5f5f5;
+            border: none;
+            padding: 0px 10px 0px 10px;
         }
 
         QPushButton:hover {
-            background-color: #0773fc;
+            background-color: #212429;
             color: #ffffff;
-            border: 0.1em solid #0773fc; /* em为相对单位 */
+            border: none;
+        }
+        QPushButton:pressed {
+            background-color: #0d0d0f;
         }
         """
 
@@ -1391,16 +1369,66 @@ class ImgProcess(QWidget):
         self.folder_button.setFixedHeight(button_height1)
         self.folder_button.setStyleSheet(button_style)
         self.folder_button.clicked.connect(self.select_folder)
+        self.folder_button.setMinimumHeight(36)
 
-        self.reset_button = QPushButton('清空列表', self)
-        self.reset_button.setFixedHeight(button_height1)
-        self.reset_button.setStyleSheet(button_style)
+        # 清空数据库按钮
+        self.reset_button = QPushButton()
+        self.reset_button.setObjectName("clearButton")
         self.reset_button.clicked.connect(self.reset)
+        self.reset_button.setMinimumWidth(36)
+        self.reset_button.setMinimumHeight(36)
+        self.reset_button.setIcon(QIcon("icon/clear.png"))
+        self.reset_button.setIconSize(QSize(18, 18))
+        self.reset_button.setToolTip("清空列表")
 
-        self.refresh_button = QPushButton('刷新列表', self)
-        self.refresh_button.setFixedHeight(button_height1)
-        self.refresh_button.setStyleSheet(button_style)
+        # 清空图标按钮样式
+        self.reset_button.setStyleSheet("""
+            QPushButton#clearButton {
+                background-color: #f0f0f0;
+                border: none;
+                padding: 0px 0px 0px 0px;
+                margin: 0px 0px 0px 0px;
+                border-radius: 6%;                       
+            }
+            QPushButton#clearButton:hover {
+                background-color: #dc3545;
+                border-radius: 6%;
+            }
+            QPushButton#clearButton:pressed {
+                background-color: #bd2130;
+            }
+        """)
+
+        # 刷新列表按钮
+        self.refresh_button = QPushButton()
+        self.refresh_button.setObjectName("refreshButton")
         self.refresh_button.clicked.connect(self.refresh)
+        self.refresh_button.setMinimumWidth(36)
+        self.refresh_button.setMinimumHeight(36)
+        self.refresh_button.setIcon(QIcon("icon/reset.png"))
+        self.refresh_button.setIconSize(QSize(18, 18))
+        self.refresh_button.setToolTip("刷新列表")
+
+        # 刷新图标按钮样式
+        self.refresh_button.setStyleSheet("""
+            QPushButton#refreshButton {
+                background-color: #f0f0f0;
+                border: none;
+                padding: 0px 0px 0px 0px;
+                margin: 0px 0px 0px 0px;
+                border-radius: 6%;
+            }
+            QPushButton#refreshButton:hover {
+                background-color: #0773fc;
+                border-radius: 6%;  
+            }
+            QPushButton#refreshButton:pressed {
+                background-color: #063A7D;
+            }
+        """)
+
+        # 设置图标hover效果
+        self.setup_hover_effects()
 
         # 创建标签1
         self.folder_label = QLabel('已选择的文件夹')
@@ -1477,9 +1505,8 @@ class ImgProcess(QWidget):
         # 创建水平布局管理器
         hbox1_left = QHBoxLayout()
         hbox1_left.addWidget(self.folder_button)
-        hbox2_left = QHBoxLayout()
-        hbox2_left.addWidget(self.reset_button)
-        hbox2_left.addWidget(self.refresh_button)
+        hbox1_left.addWidget(self.reset_button)
+        hbox1_left.addWidget(self.refresh_button)
         hbox3_left = QHBoxLayout()
         hbox3_left.addWidget(self.folder_label)
         hbox4_left = QHBoxLayout() # 筛选的文件夹显示框
@@ -1512,8 +1539,6 @@ class ImgProcess(QWidget):
         vbox1.setContentsMargins(0, 0, 0, 0)  # 调整边距
         vbox1.addSpacing(20) # 添加（）像素的空白占位
         vbox1.addLayout(hbox1_left)
-        vbox1.addSpacing(5) # 添加（）像素的空白占位
-        vbox1.addLayout(hbox2_left)
         vbox1.addSpacing(15) # 添加（）像素的空白占位
         vbox1.addLayout(hbox3_left)
         vbox1.addLayout(hbox4_left)
@@ -1603,9 +1628,11 @@ class ImgProcess(QWidget):
         """
         self.inch_copy_button = QPushButton("复制结果F1")
         self.inch_copy_button.setStyleSheet(button_style_copy)
+        self.inch_copy_button.setMinimumHeight(36)
         self.inch_copy_button.setFixedSize(button_width_copy, button_height_copy)
         self.ounce_copy_button = QPushButton("复制结果F2")
         self.ounce_copy_button.setStyleSheet(button_style_copy)
+        self.ounce_copy_button.setMinimumHeight(36)
         self.ounce_copy_button.setFixedSize(button_width_copy, button_height_copy)
 
         self.convert_cm_to_inch()
@@ -1736,6 +1763,14 @@ class ImgProcess(QWidget):
         vline_y = int((150 / 650) * self.fixed_height)  # 设置水平分隔线的位置
         self.hline.setGeometry(0, vline_y, self.fixed_width - 9*self.margin, 1) 
         self.hline.setStyleSheet("border: 1px solid #C5C5C5;")
+
+    def setup_hover_effects(self):
+        """设置按钮图标hover"""
+        self.reset_button.enterEvent = lambda event: self.reset_button.setIcon(QIcon("icon/clear_h.png"))
+        self.reset_button.leaveEvent = lambda event: self.reset_button.setIcon(QIcon("icon/clear.png"))
+
+        self.refresh_button.enterEvent = lambda event: self.refresh_button.setIcon(QIcon("icon/reset_hover.png"))
+        self.refresh_button.leaveEvent = lambda event: self.refresh_button.setIcon(QIcon("icon/reset.png"))
 
     # 切换不同的窗口大小和设置绘制标记
     def update_window_size(self, index):
@@ -2049,10 +2084,9 @@ class ImgProcess(QWidget):
 
     #查看日志
     def show_log(self):
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit
-        import os
-
-        log_path = os.path.join(os.getcwd(), "ImgProcess.log")
+    
+        LOG_DIR = BASE_DIR
+        log_path = os.path.join(LOG_DIR, "ImgProcess.log")
 
         log_window = QDialog(self)
         log_window.setWindowTitle("日志查看")
@@ -2093,18 +2127,23 @@ class ImgProcess(QWidget):
 
         log_window.exec_()
 
-    def init_logging(self):  # 初始化日志
+    def init_logging(self):
+        LOG_DIR = BASE_DIR
+        log_path = os.path.join(LOG_DIR, "ImgProcess.log")
+
         handler = RotatingFileHandler(
-            'ImgProcess.log',
-            maxBytes=5*1024*1024,  # 最大5MB
-            backupCount=1,         # 只保留 1 个备份
-            encoding='utf-8'       # ✅ 强烈建议添加这一行
+            log_path,
+            maxBytes=5 * 1024 * 1024,
+            backupCount=1,
+            encoding='utf-8'
         )
+
         logging.basicConfig(
             handlers=[handler],
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s'
         )
+
 
     #检查更新
     def check_update(self):
