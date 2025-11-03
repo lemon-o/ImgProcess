@@ -25,7 +25,7 @@ from psd_tools import PSDImage
 from pathlib import Path
 
 
-CURRENT_VERSION = "v1.1.5"  #版本号
+CURRENT_VERSION = "v1.1.6"  #版本号
 
 BASE_DIR = Path(os.getenv("LOCALAPPDATA")) / "ImgProcess"
 BASE_DIR.mkdir(parents=True, exist_ok=True)
@@ -174,7 +174,7 @@ class UpdateDialog(QDialog):
         button_style = """
         QPushButton {
             background-color: #ffffff;
-            color: #3b3b3b;
+            color: #495057;
             border-radius: 6%; /* 圆角半径使用相对单位，可以根据需要调整 */
             border: 1px solid #f5f5f5;
         }
@@ -1049,6 +1049,7 @@ class ImgProcess(QWidget):
         self._video_threads = []
         self.init_logging()
         logging.info("程序启动")
+        self.load_presets()
 
         # 创建一个线程实例
         self.thread = Worker(self)
@@ -1061,8 +1062,6 @@ class ImgProcess(QWidget):
         # self.setMinimumSize(650, 450) # 设置最小大小
         # self.setMaximumSize(1080, 1080) # 设置最大大小
         # self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding) # 设置大小策略
-        # 窗口始终在最顶层&去除默认标题栏
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
 
         # 获取屏幕尺寸
         screen = QApplication.primaryScreen()
@@ -1085,7 +1084,7 @@ class ImgProcess(QWidget):
         self.move(x, y)
         
         #设置缩进边距这样才能绘制窗口投影
-        self.margin = round((5 / 430) * self.fixed_height)
+        self.margin = round((3 / 430) * self.fixed_height)
         #设置窗口图标
         self.setWindowIcon(QIcon('./icon/ImgProcess.ico'))
         
@@ -1232,7 +1231,7 @@ class ImgProcess(QWidget):
                 padding-top: 6px;
                 padding-bottom: 6px;
                 margin: 3px 5px;
-                color: #3b3b3b;
+                color: #495057;
             }
 
             /* 悬停状态：保持一致的 padding/margin，防止文字抖动 */
@@ -1244,7 +1243,7 @@ class ImgProcess(QWidget):
                 padding-top: 6px;
                 padding-bottom: 6px;
                 margin: 3px 5px;
-                color: #3b3b3b;
+                color: #495057;
             }
         """)
 
@@ -1283,12 +1282,12 @@ class ImgProcess(QWidget):
         # 创建GSfolders界面 ############################################################
         # 创建标签1
         self.folder_name_label = QLabel('名称')
-        self.folder_name_label.setStyleSheet('color: #3b3b3b; margin-top: 5px; margin-bottom: 0px;')
+        self.folder_name_label.setStyleSheet('color: #495057; margin-top: 5px; margin-bottom: 0px;')
         # 创建标签2
         self.folder_num_label = QLabel('数量')
-        self.folder_num_label.setStyleSheet('color: #3b3b3b; margin-top: 5px; margin-bottom: 0px;')
+        self.folder_num_label.setStyleSheet('color: #495057; margin-top: 5px; margin-bottom: 0px;')
         #创建输入框
-        linedit_style_1 = 'background-color: white; color: #272727; border-radius: 6px; border: 1px solid #C5C5C5;'
+        linedit_style_1 = 'background-color: white; color: #495057; border-radius: 6px; border: 1px solid #C5C5C5;'
         linedit_height_1 = int((30 / 450) * self.fixed_height)
         self.num_folders_entry = QLineEdit()
         self.num_folders_entry.setFixedHeight(linedit_height_1)
@@ -1303,7 +1302,7 @@ class ImgProcess(QWidget):
         button_style_select_path = """
         QPushButton {
             background-color: #f5f5f5;
-            color: #3b3b3b;
+            color: #495057;
             border-radius: 6%; /* 圆角半径使用相对单位，可以根据需要调整 */
             border: 1px solid #f5f5f5;
         }
@@ -1312,6 +1311,10 @@ class ImgProcess(QWidget):
             background-color: #0773fc;
             color: #ffffff;
             border: 0.1em solid #0773fc; /* em为相对单位 */
+        }
+        QPushButton:pressed {
+            background-color: #063A7D;
+            border: none;
         }
         """
         self.select_path_button = QPushButton("创建文件夹")
@@ -1427,18 +1430,15 @@ class ImgProcess(QWidget):
             }
         """)
 
-        # 设置图标hover效果
-        self.setup_hover_effects()
-
         # 创建标签1
         self.folder_label = QLabel('已选择的文件夹')
-        self.folder_label.setStyleSheet('color: #3b3b3b; margin-top: 5px; margin-bottom: 0px;')
+        self.folder_label.setStyleSheet('color: #495057; margin-top: 5px; margin-bottom: 0px;')
 
         #创建下拉框
         combo_width = int((85 / 650) * self.fixed_width)
         combo_height = int((30 / 450) * self.fixed_height)
-        combo_style_1 = 'QComboBox { color: #3b3b3b; border: 1px solid #C5C5C5; border-radius: 4%; margin-top: 10px; padding-left:20px;} QComboBox::drop-down {  background-color: #C5C5C5; border: none; }'        
-        combo_style_2 = 'QComboBox { color: #3b3b3b; border: 1px solid #C5C5C5; border-radius: 4%; margin-top: 10px; padding-left:20px;} QComboBox::drop-down {  background-color: #C5C5C5; border: none; }'                
+        combo_style_1 = 'QComboBox { color: #495057; border: 1px solid #C5C5C5; border-radius: 4%; margin-top: 10px; padding-left:20px;} QComboBox::drop-down {  background-color: #C5C5C5; border: none; }'        
+        combo_style_2 = 'QComboBox { color: #495057; border: 1px solid #C5C5C5; border-radius: 4%; margin-top: 10px; padding-left:20px;} QComboBox::drop-down {  background-color: #C5C5C5; border: none; }'                
 
         self.filter_combo = QComboBox() # 文件类型选择
         self.filter_combo.setFixedSize(combo_width, combo_height)
@@ -1456,8 +1456,8 @@ class ImgProcess(QWidget):
         self.sort_combo.activated.connect(self.folders_sort)
 
         #创建标签2
-        label_style_3 = 'color: #3b3b3b; margin-top: 10px; margin-bottom: 0px; margin-left: 0px;'
-        label_style_4 = 'color: #3b3b3b; margin-top: 10px; margin-bottom: 0px; margin-left: 0px;'
+        label_style_3 = 'color: #495057; margin-top: 10px; margin-bottom: 0px; margin-left: 0px;'
+        label_style_4 = 'color: #495057; margin-top: 10px; margin-bottom: 0px; margin-left: 0px;'
 
         self.folder_type_label = QLabel('文件筛选类型：')
         self.folder_type_label.setStyleSheet(label_style_3)     
@@ -1465,8 +1465,8 @@ class ImgProcess(QWidget):
         self.folder_sort_label.setStyleSheet(label_style_4)
 
         #创建标签3
-        label_style_1 = 'color: #3b3b3b; margin-top: 0px; margin-bottom: 0px;'
-        label_style_2 = 'color: #3b3b3b; margin-top: 0px; margin-bottom: 0px; margin-left: 0px;color: #B6A338;'
+        label_style_1 = 'color: #495057; margin-top: 0px; margin-bottom: 0px;'
+        label_style_2 = 'color: #495057; margin-top: 0px; margin-bottom: 0px; margin-left: 0px;color: #B6A338;'
 
         self.folder_left_label = QLabel('不含')
         self.folder_left_label.setStyleSheet(label_style_1)
@@ -1478,7 +1478,7 @@ class ImgProcess(QWidget):
         self.folder_right_num_label.setStyleSheet(label_style_2)
 
         # 创建列表
-        list_style = 'background-color: white; color: #272727; border-radius: 6%; border: 1px solid #C5C5C5;'
+        list_style = 'background-color: white; color: #495057; border-radius: 6%; border: 1px solid #C5C5C5;'
         self.file_left_list = QListWidget()
         self.file_left_list.setStyleSheet(list_style)
         self.file_right_list = QListWidget()
@@ -1490,7 +1490,7 @@ class ImgProcess(QWidget):
         self.timer = QTimer()
         self.countdown_label = QLabel(self)
         self.countdown_label.setText("90 秒后自动导出图片")
-        self.countdown_label.setStyleSheet("color: #3b3b3b; margin-top: 10px; margin-bottom: 0px; margin-left: 0px; color: rgba(0, 0, 0, 0.1);")
+        self.countdown_label.setStyleSheet("color: #495057; margin-top: 10px; margin-bottom: 0px; margin-left: 0px; color: rgba(0, 0, 0, 0.1);")
 
         #创建进度条
         self.progress_bar = QProgressBar()
@@ -1567,7 +1567,7 @@ class ImgProcess(QWidget):
 
 
         # 创建Cmingoz界面 #############################################################
-        linedit_style_3 = 'background-color: white; color: #272727; border-radius: 6px; border: 1px solid #C5C5C5;'
+        linedit_style_3 = 'background-color: white; color: #495057; border-radius: 6px; border: 1px solid #C5C5C5;'
         linedit_height_3 = int((30 / 450) * self.fixed_height)
 
         self.cm_input = QLineEdit()
@@ -1591,49 +1591,37 @@ class ImgProcess(QWidget):
         validator4 = QRegExpValidator(QRegExp(r'^[0-9]+(\.[0-9]+)?$'))
         self.oz_input.setValidator(validator4)
 
-        label_style_1 = 'color: #3B3E41; margin-top: 0px; margin-bottom: 0px;'
+        self.current_input = self.cm_input  # current_input 指向 cm_input
+
+        self.cm_input.focusInEvent = lambda e: self.set_current_input(self.cm_input, e)
+        self.in_input.focusInEvent = lambda e: self.set_current_input(self.in_input, e)
+        self.g_input.focusInEvent = lambda e: self.set_current_input(self.g_input, e)
+        self.oz_input.focusInEvent = lambda e: self.set_current_input(self.oz_input, e)
+
+        label_style_1 = 'color: #495057; margin-top: 0px; margin-bottom: 0px;'
         self.cm_label = QLabel("厘米")
         self.cm_label.setStyleSheet(label_style_1)
         self.equal2 = QLabel("=")
         self.equal2.setStyleSheet(label_style_1)
         self.in_label = QLabel("英寸")
         self.in_label.setStyleSheet(label_style_1)
-        self.goz_result = QLabel()
-        self.goz_result.setStyleSheet(label_style_1)
+
         self.g_label = QLabel("克")
         self.g_label.setStyleSheet(label_style_1)
         self.equal = QLabel("=")
         self.equal.setStyleSheet(label_style_1)
         self.oz_label = QLabel("盎司")
         self.oz_label.setStyleSheet(label_style_1)
+
         self.cmin_result = QLabel()
         self.cmin_result.setStyleSheet(label_style_1)
+        self.cmin_result.setCursor(Qt.PointingHandCursor)
+        self.cmin_result.setToolTip("")  # 动态设置
 
-        #创建按钮
-        button_width_copy = int((90 / 650) * self.fixed_width)
-        button_height_copy = int((30 / 450) * self.fixed_height)
-        button_style_copy = """
-        QPushButton {
-            background-color: #f5f5f5;
-            color: #3b3b3b;
-            border-radius: 6%; /* 圆角半径使用相对单位，可以根据需要调整 */
-            border: 1px solid #f5f5f5;
-        }
-
-        QPushButton:hover {
-            background-color: #0773fc;
-            color: #ffffff;
-            border: 0.1em solid #0773fc; /* em为相对单位 */
-        }
-        """
-        self.inch_copy_button = QPushButton("复制结果F1")
-        self.inch_copy_button.setStyleSheet(button_style_copy)
-        self.inch_copy_button.setMinimumHeight(36)
-        self.inch_copy_button.setFixedSize(button_width_copy, button_height_copy)
-        self.ounce_copy_button = QPushButton("复制结果F2")
-        self.ounce_copy_button.setStyleSheet(button_style_copy)
-        self.ounce_copy_button.setMinimumHeight(36)
-        self.ounce_copy_button.setFixedSize(button_width_copy, button_height_copy)
+        self.goz_result = QLabel()
+        self.goz_result.setStyleSheet(label_style_1)
+        self.goz_result.setCursor(Qt.PointingHandCursor)
+        self.goz_result.setToolTip("")  # 动态设置
 
         self.convert_cm_to_inch()
         self.convert_inch_to_cm()
@@ -1645,52 +1633,232 @@ class ImgProcess(QWidget):
         self.g_input.textChanged.connect(self.convert_g_to_ounce)
         self.oz_input.textChanged.connect(self.convert_ounce_to_g)
 
-        self.inch_copy_button.clicked.connect(self.copy_cmin_result)
-        self.ounce_copy_button.clicked.connect(self.copy_goz_result)
+        # 绑定鼠标事件
+        self.cmin_result.mousePressEvent = lambda e: self.copy_label_result(self.cmin_result, e)
+        self.goz_result.mousePressEvent = lambda e: self.copy_label_result(self.goz_result, e)
 
-        # 创建布局管理器
-        inch_layout = QHBoxLayout()
-        inch_layout.addWidget(self.cmin_result)
-        inch_layout.addSpacing(10)
-        inch_layout.addWidget(self.inch_copy_button)
+        # 创建虚拟数字键盘
+        numpad_widget = QWidget()
+        numpad_layout = QGridLayout(numpad_widget)
+        numpad_layout.setContentsMargins(0, 0, 0, 0)
+        numpad_widget.setContentsMargins(0, 0, 0, 0)
+        
+        numpad_button_style = """
+        QPushButton {
+            background-color: #f5f5f5;
+            color: #495057;
+            border-radius: 8px;
+            border: 1px solid #d0d0d0;
+            font-size: 16px;
+            font-weight: bold;
+            min-width: 50px;
+            min-height: 45px;
+        }
+        QPushButton:hover {
+            background-color: #e0e0e0;
+            border: 1px solid #a0a0a0;
+        }
+        QPushButton:pressed {
+            background-color: #d0d0d0;
+        }
+        """
+        
+        # 数字键盘布局 (3x4)
+        buttons = [
+            ['7', '8', '9'],
+            ['4', '5', '6'],
+            ['1', '2', '3'],
+            ['.', '0', '⌫']
+        ]
+        
+        for row_idx, row in enumerate(buttons):
+            for col_idx, btn_text in enumerate(row):
+                btn = QPushButton(btn_text)
+                btn.setStyleSheet(numpad_button_style)
+                btn.clicked.connect(lambda checked, text=btn_text: self.numpad_click(text))
+                numpad_layout.addWidget(btn, row_idx, col_idx)
+        
+        # 清除按钮 (占据整行)
+        clear_btn = QPushButton("清除")
+        clear_btn.setStyleSheet(numpad_button_style)
+        clear_btn.clicked.connect(self.numpad_clear)
+        numpad_layout.addWidget(clear_btn, 4, 0, 1, 3)
 
-        inch2_layout = QHBoxLayout()
-        inch2_layout.addWidget(self.cm_input)
-        inch2_layout.addWidget(self.cm_label)
-        inch2_layout.addWidget(self.equal)
-        inch2_layout.addWidget(self.in_input)
-        inch2_layout.addWidget(self.in_label)
+        # 创建长度转换的 QGroupBox
+        self.length_group = QGroupBox("长度转换")
+        length_layout = QVBoxLayout()
+        
+        inch_result_layout = QHBoxLayout()
+        inch_result_layout.addWidget(self.cmin_result)
 
-        ounce_layout = QHBoxLayout()
-        ounce_layout.addWidget(self.goz_result)
-        ounce_layout.addSpacing(0)
-        ounce_layout.addWidget(self.ounce_copy_button)
+        inch_input_layout = QHBoxLayout()
+        inch_input_layout.addWidget(self.cm_input)
+        inch_input_layout.addWidget(self.cm_label)
+        inch_input_layout.addWidget(self.equal)
+        inch_input_layout.addWidget(self.in_input)
+        inch_input_layout.addWidget(self.in_label)
 
-        ounce2_layout = QHBoxLayout()
-        ounce2_layout.addWidget(self.g_input)
-        ounce2_layout.addWidget(self.g_label)
-        ounce2_layout.addWidget(self.equal2)
-        ounce2_layout.addWidget(self.oz_input)
-        ounce2_layout.addWidget(self.oz_label)
+        length_layout.addLayout(inch_input_layout)
+        length_layout.addLayout(inch_result_layout)
+        self.length_group.setLayout(length_layout)
+
+        # 创建重量转换的 QGroupBox
+        self.weight_group = QGroupBox("重量转换")
+        weight_layout = QVBoxLayout()
+        
+        ounce_result_layout = QHBoxLayout()
+        ounce_result_layout.addWidget(self.goz_result)
+
+        ounce_input_layout = QHBoxLayout()
+        ounce_input_layout.addWidget(self.g_input)
+        ounce_input_layout.addWidget(self.g_label)
+        ounce_input_layout.addWidget(self.equal2)
+        ounce_input_layout.addWidget(self.oz_input)
+        ounce_input_layout.addWidget(self.oz_label)
+
+        weight_layout.addLayout(ounce_input_layout)
+        weight_layout.addLayout(ounce_result_layout)
+        self.weight_group.setLayout(weight_layout)
+        
+        # 创建转换区域容器（包含长度和重量转换）
+        self.converter_widget = QWidget()
+        converter_layout = QVBoxLayout(self.converter_widget)
+        converter_layout.addWidget(self.length_group)
+        converter_layout.addWidget(self.weight_group)
+        converter_layout.addStretch()
+        converter_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 创建预设列表区域
+        self.preset_group = QGroupBox("预设列表")
+        preset_main_layout = QVBoxLayout()
+        
+        # 预设按钮滚动区域
+        self.preset_scroll = QScrollArea()
+        self.preset_scroll.setWidgetResizable(True)
+        self.preset_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.preset_scroll.setStyleSheet("""
+            QScrollArea { 
+                border: 1px solid #dadce0;
+                border-radius: 8px;
+                background-color: white;
+            }
+            QScrollArea > QWidget > QWidget { 
+                background-color: white;
+            }
+        """)
+        
+        self.preset_container = QWidget()
+        self.preset_layout = QVBoxLayout(self.preset_container)
+        self.preset_layout.setAlignment(Qt.AlignTop)
+        self.preset_scroll.setWidget(self.preset_container)
+        
+        preset_main_layout.addWidget(self.preset_scroll)
+        
+        # 底部按钮布局
+        preset_button_layout = QHBoxLayout()
+        self.add_preset_btn = QPushButton("新增")
+        self.delete_preset_btn = QPushButton("删除")
+        self.add_preset_btn.setMinimumHeight(28)
+        self.delete_preset_btn.setMinimumHeight(28)
+        
+        preset_btn_style = """
+            QPushButton {
+                background-color: #f5f5f5;
+                color: #495057;
+                border-radius: 6%;
+                border: 1px solid #f5f5f5;
+            }
+            QPushButton:hover {
+                background-color: #0773fc;
+                color: #ffffff;
+                border: 0.1em solid #0773fc;
+            }
+            QPushButton:pressed {
+                background-color: #063A7D;
+                border: none;
+            }
+        """
+        self.add_preset_btn.setStyleSheet(preset_btn_style)
+        self.delete_preset_btn.setStyleSheet(preset_btn_style)
+        
+        self.add_preset_btn.clicked.connect(self.show_add_preset_dialog)
+        self.delete_preset_btn.clicked.connect(self.show_delete_preset_dialog)
+        
+        preset_button_layout.addWidget(self.add_preset_btn)
+        preset_button_layout.addWidget(self.delete_preset_btn)
+        preset_main_layout.addLayout(preset_button_layout)
+        
+        self.preset_group.setLayout(preset_main_layout)
+        self.preset_group.hide()
+        
+        # 存储预设按钮
+        self.preset_buttons = []
+        self.selected_preset_btn = None
+        
+        # 左侧区域容器
+        self.left_container = QWidget()
+        left_container_layout = QVBoxLayout(self.left_container)
+        
+        # 顶部切换按钮区域
+        top_bar = QWidget()
+        top_bar.setStyleSheet("QWidget { border: none; }")
+        top_bar_layout = QHBoxLayout(top_bar)
+        top_bar_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 切换图标按钮（放在左侧）
+        self.switch_btn = QPushButton()
+        self.switch_btn.setMinimumWidth(24)
+        self.switch_btn.setMinimumHeight(24)
+        self.switch_btn.setIcon(QIcon("icon/Switch.png"))
+        self.switch_btn.setIconSize(QSize(14, 14))
+        self.switch_btn.setToolTip("切换预设列表/转换器视图")
+        self.switch_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f0f0f0;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+                border-radius: 6%;
+            }
+            QPushButton:hover {
+                background-color: #0773fc;
+                border-radius: 6%;  
+            }
+            QPushButton:pressed {
+                background-color: #063A7D;
+            }
+        """)
+        self.switch_btn.clicked.connect(self.toggle_view)
+        self.is_converter_view = True
+        
+        top_bar_layout.addWidget(self.switch_btn)
+        top_bar_layout.addStretch()
+        
+        # 添加顶部栏和内容区域
+        left_container_layout.addWidget(top_bar)
+        left_container_layout.addWidget(self.converter_widget)
+        left_container_layout.addWidget(self.preset_group)
+        left_container_layout.setContentsMargins(0, 0, 5, 3) #左、上、右、下
+        
+        # 创建主水平布局
+        main_horizontal = QHBoxLayout()
+        main_horizontal.setContentsMargins(0, 0, 0, 0)
+        main_horizontal.addWidget(self.left_container, stretch=2)
+        main_horizontal.addWidget(numpad_widget, stretch=1)
         
         # 创建子界面布局管理器
         self.Cmingoz_page = QWidget()   
         main_page3 = QVBoxLayout(self.Cmingoz_page)
-        main_page3.addSpacing(12)
-        main_page3.addLayout(inch2_layout)
-        main_page3.addLayout(inch_layout)
-        main_page3.addSpacing(36)
-        main_page3.addLayout(ounce2_layout)
-        main_page3.addLayout(ounce_layout)
-        main_page3.addSpacing(12)
+        main_page3.addLayout(main_horizontal)
 
         # 将界面添加到堆叠小部件中
         self.stackedWidget.addWidget(self.Cmingoz_page)
 
-        self.shortcut_return = QShortcut(QKeySequence(Qt.Key_F1), self)
-        self.shortcut_return.activated.connect(self.copy_cmin_result)
-        self.shortcut_return = QShortcut(QKeySequence(Qt.Key_F2), self)
-        self.shortcut_return.activated.connect(self.copy_goz_result)
+        self.shortcut_f1 = QShortcut(QKeySequence(Qt.Key_F1), self)
+        self.shortcut_f1.activated.connect(lambda: self.copy_label_result(self.cmin_result))
+
+        self.shortcut_f2 = QShortcut(QKeySequence(Qt.Key_F2), self)
+        self.shortcut_f2.activated.connect(lambda: self.copy_label_result(self.goz_result))
         # 上面是Cmingoz界面 ############################################################  
 
 
@@ -1743,9 +1911,12 @@ class ImgProcess(QWidget):
         main_layout.addLayout(hbox_main)    
         self.setLayout(main_layout) # 将main_layout贴在父窗口上
         self.stackedWidget.setCurrentIndex(1) # 初始页面为page2
-        # 设置窗口背景透明
+        # 设置窗口无边框和透明背景
+        self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        
+        # 窗口始终在最顶层&去除默认标题栏
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+            
         # 创建垂直分隔线添加到page2
         self.vline = QFrame(self.FoldersFilter_page)
         self.vline.setFrameShape(QFrame.VLine)
@@ -1755,14 +1926,10 @@ class ImgProcess(QWidget):
         margin_top_value = self.margin
         margin_bottom_value = self.margin
         self.vline.setStyleSheet("border: 1px solid #C5C5C5; margin-top: {}px; margin-bottom: {}px;".format(margin_top_value, margin_bottom_value))
-        self.vline.setGeometry(vline_x, vline_y, 1, self.fixed_height - 9*self.margin)
-        
-        # 创建垂直分隔线添加到page3
-        self.hline = QFrame(self.Cmingoz_page)
-        self.hline.setFrameShape(QFrame.HLine) 
-        vline_y = int((150 / 650) * self.fixed_height)  # 设置水平分隔线的位置
-        self.hline.setGeometry(0, vline_y, self.fixed_width - 9*self.margin, 1) 
-        self.hline.setStyleSheet("border: 1px solid #C5C5C5;")
+        self.vline.setGeometry(vline_x, vline_y, 1, self.fixed_height - 15*self.margin)
+
+        # 设置图标hover效果
+        self.setup_hover_effects()
 
     def setup_hover_effects(self):
         """设置按钮图标hover"""
@@ -1771,6 +1938,9 @@ class ImgProcess(QWidget):
 
         self.refresh_button.enterEvent = lambda event: self.refresh_button.setIcon(QIcon("icon/reset_hover.png"))
         self.refresh_button.leaveEvent = lambda event: self.refresh_button.setIcon(QIcon("icon/reset.png"))
+      
+        self.switch_btn.enterEvent = lambda event: self.switch_btn.setIcon(QIcon("icon/Switch_hover.png"))
+        self.switch_btn.leaveEvent = lambda event: self.switch_btn.setIcon(QIcon("icon/Switch.png"))
 
     # 切换不同的窗口大小和设置绘制标记
     def update_window_size(self, index):
@@ -1785,8 +1955,10 @@ class ImgProcess(QWidget):
             self.setFixedSize(self.change_width, self.change_height)
             self.selected_page2 = True
         if index == 2:
-            self.change_width = int((350/ 600) * self.fixed_width)
-            self.change_height = int((235 / 430) * self.fixed_height)
+            if hasattr(self, "current_input") and self.current_input:
+                self.current_input.setFocus()
+            self.change_width = int((500 / 600) * self.fixed_width)
+            self.change_height = int((300 / 430) * self.fixed_height)
             self.setFixedSize(self.change_width, self.change_height)
             self.selected_page3 = True
 
@@ -1821,39 +1993,119 @@ class ImgProcess(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)  # 开启抗锯齿
-        rect_color = QColor(7, 115, 252)
-        corner_radius_percentage = 2
-        # 计算相对单位的圆角大小
+        painter.setRenderHint(QPainter.Antialiasing, True)  # 强制启用抗锯齿
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)  # 平滑变换
+        
+        # --- 圆角相关 ---
         rect = self.rect()
+        corner_radius_percentage = 2
         corner_radius = min(rect.width(), rect.height()) * corner_radius_percentage / 100.0
+        
+        # 创建圆角矩形路径（考虑margin）
+        r = rect.adjusted(self.margin, self.margin, -self.margin, -self.margin)
+        
+        # --- 绘制阴影效果（在裁剪之前绘制）---
+        if not self.animation_finished:
+            # 阴影配置
+            blur_layers = 100        # 阴影层数，控制平滑度
+            blur_distance = 100      # 阴影扩散距离（像素）
+            
+            for i in range(blur_layers):
+                # 更平滑的透明度渐变
+                progress = i / blur_layers  # 0到1的进度
+                alpha = int(15 * (1 - progress) ** 1)  # 实现更平滑的渐变效果
+                
+                if alpha > 0:  # 只绘制有透明度的层
+                    brush_color = QColor(0, 0, 0, alpha)
+                    painter.setBrush(QBrush(brush_color))
+                    painter.setPen(Qt.NoPen)
+                    
+                    # 根据进度计算阴影偏移距离
+                    offset = int(progress * blur_distance)
+                    shadow_rect = rect.adjusted(offset, offset, -offset, -offset)
+                    
+                    # 根据当前矩形尺寸动态计算圆角半径
+                    shadow_corner_radius = min(shadow_rect.width(), shadow_rect.height()) * corner_radius_percentage / 100.0
+                    
+                    shadow_path = QPainterPath()
+                    shadow_path.addRoundedRect(shadow_rect.x(), shadow_rect.y(), 
+                                            shadow_rect.width(), shadow_rect.height(), 
+                                            shadow_corner_radius, shadow_corner_radius)
+                    painter.drawPath(shadow_path)
+        
+        # 创建整体圆角裁剪路径
+        clip_path = QPainterPath()
+        clip_path.addRoundedRect(r.x(), r.y(), r.width(), r.height(), corner_radius, corner_radius)
+        painter.setClipPath(clip_path)
+        
+        # 计算标题栏高度
+        self.mask_height = int((5 / 90) * self.fixed_height)
+        
+        # --- 绘制标题栏区域背景（黑色）---
+        painter.fillRect(self.margin, self.margin,
+                        self.width() - 2 * self.margin,
+                        self.mask_height,
+                        QColor(0, 0, 0))
+        
+        # --- 绘制内容区域背景（白色，从标题栏下方开始）---
+        painter.fillRect(self.margin, self.margin + self.mask_height,
+                        self.width() - 2 * self.margin,
+                        self.height() - 2 * self.margin - self.mask_height,
+                        QColor(255, 255, 255))
+        
+        # --- 绘制下拉效果矩形 ---
         if self.animation_finished:
-            #绘制一个圆角矩形用于触发下拉效果
+            # 临时取消裁剪，绘制下拉矩形
+            painter.setClipping(False)
+            
+            rect_color = QColor(7, 115, 252)
             painter.setBrush(rect_color)
             painter.setPen(Qt.NoPen)
             width = self.width() // 5
             x = (self.width() - width) // 2
-            painter.drawRoundedRect(x, 0, width, self.height(), corner_radius, corner_radius)
-        else:  
-            # 画多个矩形透明度渐变实现羽化边缘效果
-            for i in range(self.margin):
-                # 透明度从0开始递增
-                alpha = i * self.margin
-                shade_level = self.margin // 4
-                brush_color = QColor(0, 0, 0, alpha)
-                painter.setBrush(QBrush(brush_color))
-                # 禁用描边
-                painter.setPen(Qt.NoPen)
-                rect = self.rect().adjusted(i * shade_level, i * shade_level, -i * shade_level, -i * shade_level)
-                painter.drawRect(rect)
-        # 绘制主窗口背景
-        painter.fillRect(self.margin, self.margin, self.width() - 2 * self.margin, self.height() - 2 * self.margin, QColor(255, 255, 255))
-        # 在窗口左侧添加纵向遮罩
+            
+            # 下拉矩形从顶部开始
+            painter.drawRoundedRect(x, 0, width, self.height(), 
+                                corner_radius, corner_radius)
+            
+            # 恢复裁剪
+            painter.setClipPath(clip_path)
+        
+        # --- 左侧纵向遮罩 ---
         self.mask_width = int((5 / 90) * self.fixed_width)
-        painter.fillRect(self.margin, self.margin, self.mask_width, self.height() - 2 * self.margin, QColor(239, 242, 246))
-        # 在窗口顶部添加横向遮罩
-        self.mask_height = int((5 / 90) * self.fixed_height)
-        painter.fillRect(self.margin, self.margin, self.width() - 2 * self.margin, self.mask_height, QColor(0, 0, 0))      
+        painter.fillRect(self.margin, self.margin + self.mask_height,
+                        self.mask_width, self.height() - 2 * self.margin - self.mask_height,
+                        QColor(239, 242, 246))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # 不要调用 update_window_mask()
+        # 更新样式
+        self.update_styles()
+
+    def update_styles(self):
+        """更新关闭按钮样式"""
+        corner_radius_percentage = 2
+        corner_radius = int(min(self.width(), self.height()) * corner_radius_percentage / 100.0)
+        
+        # 关闭按钮样式
+        button_style_close = f"""
+        QPushButton {{
+            color: #ffffff;
+            border: 0px;
+            background-color: transparent;
+            border-top-right-radius: {corner_radius}px;
+        }}
+
+        QPushButton:hover {{
+            background-color: #f55b31;
+            border: 0px;
+            border-top-right-radius: {corner_radius}px;
+        }}
+        """
+        
+        if hasattr(self, 'close_button'):
+            self.close_button.setStyleSheet(button_style_close)
       
     # 获取显示器边界信息
     def update_screen_info(self):
@@ -3060,11 +3312,302 @@ class ImgProcess(QWidget):
 
 
 ###Cmingoz#######################################################Cmingoz###################################Cmingoz#####################################################  
-    # def resizeEvent(self, event):
-    #     # 获取新的窗口宽度和高度
-    #     new_width = event.size().width()
-    #     # 将水平分隔线位置和大小设置为新的窗口宽度和高度
-    #     self.hline.setGeometry(0, self.y, new_width, 1)
+    def toggle_view(self):
+        """切换转换器和预设列表视图"""
+        if self.is_converter_view:
+            # 切换到预设列表
+            self.converter_widget.hide()
+            self.preset_group.show()
+            self.is_converter_view = False
+        else:
+            # 切换回转换器
+            self.preset_group.hide()
+            self.converter_widget.show()
+            self.is_converter_view = True
+
+        if hasattr(self, "current_input") and self.current_input:
+            self.current_input.setFocus()
+    
+    def show_add_preset_dialog(self):
+        """显示添加预设的对话框"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("添加预设")
+        dialog.setFixedSize(400, 80)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 输入框和按钮水平布局
+        input_button_layout = QHBoxLayout()
+        linedit_style = 'background-color: white; color: #495057; border-radius: 6px; border: 1px solid #C5C5C5;'
+        self.preset_input = QLineEdit()
+        self.preset_input.setStyleSheet(linedit_style)
+        self.preset_input.setMinimumHeight(36)
+        self.preset_input.setPlaceholderText("  请输入或粘贴转换结果")
+        
+        paste_btn = QPushButton("粘贴")
+        add_btn = QPushButton("添加")
+        paste_btn.setMinimumHeight(36)
+        add_btn.setMinimumHeight(36)
+        
+        btn_style = """
+            QPushButton {
+                background-color: white;
+                color: #495057;
+                border-radius: 6%;
+                border: 1px solid #f5f5f5;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #0773fc;
+                color: #ffffff;
+                border: 0.1em solid #0773fc;
+            }
+            QPushButton:pressed {
+                background-color: #063A7D;
+                border: none;
+            }
+        """
+        paste_btn.setStyleSheet(btn_style)
+        add_btn.setStyleSheet(btn_style)
+        
+        paste_btn.clicked.connect(lambda: self.preset_input.paste())
+        add_btn.clicked.connect(lambda: self.add_preset_item(dialog))
+        
+        input_button_layout.addWidget(self.preset_input)
+        input_button_layout.addWidget(paste_btn)
+        input_button_layout.addWidget(add_btn)
+        
+        layout.addLayout(input_button_layout)
+        dialog.exec_()
+    
+    def add_preset_item(self, dialog):
+        """添加预设项"""
+        text = self.preset_input.text().strip()
+        if not text:
+            return
+        
+        # 创建预设按钮
+        preset_btn = QPushButton(text)
+        preset_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #f5f5f5;
+            color: #495057;
+            border-radius: 6%;
+            border: 1px solid #d0d0d0;
+        }
+        QPushButton:hover {
+            background-color: #e0e0e0;
+            border: 1px solid #a0a0a0;
+        }
+        QPushButton:pressed {
+            background-color: #e0e0e0;
+            border: none;
+            border: 1px solid #a0a0a0;
+        }
+        QPushButton:checked {
+            background-color: #e0e0e0;
+            border: 1px solid #a0a0a0;
+        }
+        """)
+        preset_btn.setCheckable(True)
+        preset_btn.setCursor(Qt.PointingHandCursor)
+        preset_btn.clicked.connect(lambda: self.preset_btn_clicked(preset_btn, text))
+        
+        self.preset_layout.addWidget(preset_btn)
+        self.preset_buttons.append(preset_btn)
+        
+        # 保存预设数据
+        self.save_presets()
+        
+        dialog.accept()
+    
+    def preset_btn_clicked(self, btn, text):
+        """预设按钮点击事件"""
+        # 取消其他按钮的选中状态
+        for preset_btn in self.preset_buttons:
+            if preset_btn != btn:
+                preset_btn.setChecked(False)
+        
+        # 复制文本到剪贴板
+        clipboard = QApplication.clipboard()
+        clipboard.setText(text)
+        
+        # 更新选中的按钮
+        self.selected_preset_btn = btn if btn.isChecked() else None
+        self.show_small_tooltip(self.preset_group, "已复制")
+        QTimer.singleShot(1000, self.toggle_view)  # 延时1000毫秒执行
+    
+    def show_delete_preset_dialog(self):
+        """显示删除预设的对话框"""
+        if not self.preset_buttons:
+            return
+
+        class DeletePresetDialog(QDialog):
+            def __init__(self, parent, checkboxes):
+                super().__init__(parent)
+                self.checkboxes = checkboxes
+
+            def keyPressEvent(self, event):
+                # Ctrl + A 全选
+                if event.modifiers() & Qt.ControlModifier and event.key() == Qt.Key_A:
+                    for checkbox, _ in self.checkboxes:
+                        checkbox.setChecked(True)
+                else:
+                    super().keyPressEvent(event)
+
+        # === 创建对话框 ===
+        dialog = DeletePresetDialog(self, [])
+        dialog.setWindowTitle("删除预设")
+
+        layout = QVBoxLayout(dialog)
+
+        # 提示标签
+        tip_label = QLabel("请选择要删除的预设项")
+        layout.addWidget(tip_label)
+
+        # 滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("""
+            QScrollArea { 
+                border: 1px solid #dadce0;
+                border-radius: 8px;
+                background-color: white;
+            }
+            QScrollArea > QWidget > QWidget { 
+                background-color: white;
+            }
+        """)
+
+        # 复选框容器
+        checkbox_container = QWidget()
+        checkbox_layout = QVBoxLayout(checkbox_container)
+        checkbox_layout.setAlignment(Qt.AlignTop)
+
+        # 创建复选框列表
+        self.delete_checkboxes = []
+        for preset_btn in self.preset_buttons:
+            checkbox = QCheckBox(preset_btn.text())
+            checkbox.setStyleSheet("""
+                QCheckBox {
+                    background-color: #f5f5f5;
+                    color: #495057;
+                    border-radius: 6%;
+                    border: 1px solid #d0d0d0;
+                    padding: 10px;
+                }
+                QCheckBox:hover {
+                    background-color: #e0e0e0;
+                    border: 1px solid #a0a0a0;
+                }
+                QCheckBox::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 3px;
+                    border: 1px solid #d0d0d0;
+                    background-color: white;
+                }
+                QCheckBox::indicator:checked {
+                    background-color: #0773fc;
+                    border: 1px solid #0773fc;
+                }
+            """)
+            checkbox_layout.addWidget(checkbox)
+            self.delete_checkboxes.append((checkbox, preset_btn))
+
+        # 将复选框传入 dialog 实例
+        dialog.checkboxes = self.delete_checkboxes
+
+        scroll.setWidget(checkbox_container)
+        layout.addWidget(scroll)
+
+        # 按钮区域
+        button_layout = QHBoxLayout()
+        confirm_btn = QPushButton("确认删除")
+        cancel_btn = QPushButton("取消")
+        confirm_btn.setMinimumHeight(36)
+        cancel_btn.setMinimumHeight(36)
+
+        btn_style = """
+            QPushButton {
+                background-color: white;
+                color: #495057;
+                border-radius: 6%;
+                border: 1px solid #f5f5f5;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #0773fc;
+                color: #ffffff;
+                border: 0.1em solid #0773fc;
+            }
+            QPushButton:pressed {
+                background-color: #063A7D;
+                border: none;
+            }
+        """
+        confirm_btn.setStyleSheet(btn_style)
+        cancel_btn.setStyleSheet(btn_style)
+
+        confirm_btn.clicked.connect(lambda: self.confirm_delete_presets(dialog))
+        cancel_btn.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(confirm_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        dialog.exec_()
+    
+    def confirm_delete_presets(self, dialog):
+        """确认删除选中的预设项"""
+        # 收集要删除的按钮
+        buttons_to_delete = []
+        for checkbox, preset_btn in self.delete_checkboxes:
+            if checkbox.isChecked():
+                buttons_to_delete.append(preset_btn)
+        
+        # 删除选中的按钮
+        for preset_btn in buttons_to_delete:
+            self.preset_layout.removeWidget(preset_btn)
+            self.preset_buttons.remove(preset_btn)
+            if self.selected_preset_btn == preset_btn:
+                self.selected_preset_btn = None
+            preset_btn.deleteLater()
+        
+        # 保存更新后的预设数据
+        self.save_presets()
+        
+        dialog.accept()
+
+    def set_current_input(self, input_widget, event):
+        """设置当前焦点的输入框"""
+        self.current_input = input_widget
+        QLineEdit.focusInEvent(input_widget, event)
+
+    def numpad_click(self, text):
+        """处理数字键盘点击"""
+        if self.current_input is None:
+            return
+        
+        if text == '⌫':  # 退格
+            current_text = self.current_input.text()
+            self.current_input.setText(current_text[:-1])
+        else:
+            # 插入字符到光标位置
+            cursor_pos = self.current_input.cursorPosition()
+            current_text = self.current_input.text()
+            new_text = current_text[:cursor_pos] + text + current_text[cursor_pos:]
+            self.current_input.setText(new_text)
+            self.current_input.setCursorPosition(cursor_pos + 1)
+
+    def numpad_clear(self):
+        """清除当前输入框内容"""
+        if self.current_input is not None:
+            self.current_input.clear()
+
+        if hasattr(self, "current_input") and self.current_input:
+            self.current_input.setFocus()
 
     def convert_cm_to_inch(self):
         text = self.cm_input.text()
@@ -3073,11 +3616,17 @@ class ImgProcess(QWidget):
             inch = cm * 0.393701
             self.in_input.textChanged.disconnect()
             self.in_input.setText(f"{inch:.4f}")
-            self.cmin_result.setText(f"{cm:.2f} cm / {inch:.2f} inch")
+            result_text = f"{cm:.2f} cm / {inch:.2f} inch"
+            self.cmin_result.setText(result_text)
+            # 当有结果时显示 tooltip
+            self.cmin_result.setToolTip("点击复制转换结果（快捷键：F1）")
             self.in_input.textChanged.connect(self.convert_inch_to_cm)
         except ValueError:
-            self.cmin_result.setText("未输入换算数字")
+            self.cmin_result.setText("")
+            # 清空时隐藏 tooltip
+            self.cmin_result.setToolTip("")
             self.in_input.clear()
+
 
     def convert_inch_to_cm(self):
         text = self.in_input.text()
@@ -3086,11 +3635,15 @@ class ImgProcess(QWidget):
             cm = inch / 0.393701
             self.cm_input.textChanged.disconnect()
             self.cm_input.setText(f"{cm:.4f}")
-            self.cmin_result.setText(f"{inch:.2f} inch / {cm:.2f} cm")
+            result_text = f"{inch:.2f} inch / {cm:.2f} cm"
+            self.cmin_result.setText(result_text)
+            self.cmin_result.setToolTip("点击复制转换结果（快捷键：F1）")
             self.cm_input.textChanged.connect(self.convert_cm_to_inch)
         except ValueError:
-            self.cmin_result.setText("未输入换算数字")
+            self.cmin_result.setText("")
+            self.cmin_result.setToolTip("")
             self.cm_input.clear()
+
 
     def convert_g_to_ounce(self):
         text = self.g_input.text()
@@ -3099,11 +3652,15 @@ class ImgProcess(QWidget):
             ounce = g * 0.035274
             self.oz_input.textChanged.disconnect()
             self.oz_input.setText(f"{ounce:.4f}")
-            self.goz_result.setText(f"{g:.2f} g / {ounce:.2f} oz")
+            result_text = f"{g:.2f} g / {ounce:.2f} oz"
+            self.goz_result.setText(result_text)
+            self.goz_result.setToolTip("点击复制转换结果（快捷键：F2）")
             self.oz_input.textChanged.connect(self.convert_ounce_to_g)
         except ValueError:
-            self.goz_result.setText("未输入换算数字")
+            self.goz_result.setText("")
+            self.goz_result.setToolTip("")
             self.oz_input.clear()
+
 
     def convert_ounce_to_g(self):
         text = self.oz_input.text()
@@ -3112,62 +3669,84 @@ class ImgProcess(QWidget):
             g = ounce / 0.035274
             self.g_input.textChanged.disconnect()
             self.g_input.setText(f"{g:.4f}")
-            self.goz_result.setText(f"{ounce:.2f} oz / {g:.2f} g")
+            result_text = f"{ounce:.2f} oz / {g:.2f} g"
+            self.goz_result.setText(result_text)
+            self.goz_result.setToolTip("点击复制转换结果（快捷键：F2）")
             self.g_input.textChanged.connect(self.convert_g_to_ounce)
         except ValueError:
-            self.goz_result.setText("未输入换算数字")
+            self.goz_result.setText("")
+            self.goz_result.setToolTip("")
             self.g_input.clear()
 
-    def copy_cmin_result(self):
-        if self.cmin_result.text() == "未输入换算数字":
-            QMessageBox.information(self,'提示','请输入要换算的数字')
+    def copy_label_result(self, label, event=None):
+        """通用复制函数：点击文本或快捷键触发"""
+        text = label.text().strip()
+        if not text:
             return
-        else:
-            clipboard = QApplication.clipboard()
-            result = self.cmin_result.text()
-            clipboard.setText(result)
-            self.show_small_tooltip(self, "✓\n已复制")
+
+        # 如果有 event，判断点击是否在文本区域
+        if event is not None:
+            fm = label.fontMetrics()
+            rect = fm.boundingRect(text)
+            alignment = label.alignment()
+            if alignment & Qt.AlignHCenter:
+                rect.moveLeft((label.width() - rect.width()) // 2)
+            elif alignment & Qt.AlignRight:
+                rect.moveLeft(label.width() - rect.width())
+            if alignment & Qt.AlignVCenter:
+                rect.moveTop((label.height() - rect.height()) // 2)
+            elif alignment & Qt.AlignBottom:
+                rect.moveTop(label.height() - rect.height())
+            
+            if not rect.contains(event.pos()):
+                return  # 点击不在文本区域，直接返回
+
+        # 复制到剪贴板
+        clipboard = QApplication.clipboard()
+        clipboard.setText(text)
+        self.show_small_tooltip(self.left_container, "已复制")
+
+        # 清空输入框并恢复焦点
+        if label == self.cmin_result:
             self.cm_input.clear()
             self.in_input.clear()
-        
-    def copy_goz_result(self):
-        if self.goz_result.text() == "未输入换算数字":
-            QMessageBox.information(self,'提示','请输入要换算的数字')
-            return
-        else:
-            clipboard = QApplication.clipboard()
-            result = self.goz_result.text()
-            clipboard.setText(result)
-            self.show_small_tooltip(self, "✓\n已复制")
+        elif label == self.goz_result:
             self.g_input.clear()
             self.oz_input.clear()
 
+        if hasattr(self, "current_input") and self.current_input:
+            self.current_input.setFocus()
+
     def show_small_tooltip(self, parent, text):
-        """显示小提示"""
+        """显示小提示，居中并保证大小合理"""
         tooltip = QLabel(parent)
         tooltip.setAlignment(Qt.AlignCenter)
         tooltip.setStyleSheet("""
             QLabel {
-                background-color: rgba(200, 200, 200, 150);
+                background-color: rgba(0, 0, 0, 0.7);
+                color: white;
                 border-radius: 10px;
                 padding: 10px;
-                font: bold 16px;
-                color: #3b3b3b;
-                min-width: 70px;
-                min-height: 70px;
+                font: bold 18px;
+                min-width: 50px;
+                min-height: 30px;
             }
         """)
         tooltip.setText(text)
         tooltip.adjustSize()
-        
-        # 居中显示
+
+        # 再次调整大小，确保 padding 生效
+        tooltip.resize(tooltip.sizeHint())
+
+        # 居中显示（相对于 parent 内容区域）
         x = (parent.width() - tooltip.width()) // 2
         y = (parent.height() - tooltip.height()) // 2
         tooltip.move(x, y)
         tooltip.show()
-        
-        # 2秒后自动消失
-        QTimer.singleShot(2000, tooltip.deleteLater)
+
+        # 自动消失
+        QTimer.singleShot(1000, tooltip.deleteLater)
+
 ###Cmingoz#######################################################Cmingoz###################################Cmingoz#####################################################  
             
             
@@ -3203,6 +3782,64 @@ class ImgProcess(QWidget):
             # 调用基类的 closeEvent 方法以关闭窗口
             super().closeEvent(event)
 
+    def save_presets(self):
+        """保存预设数据到本地文件"""
+        try:
+            preset_texts = [btn.text() for btn in self.preset_buttons]
+            settings = QSettings("lemon-o", "ImgProcess")
+            settings.setValue("presets", preset_texts)
+            settings.sync()  # 强制立即写入
+            print(f"保存预设成功: {preset_texts}")
+        except Exception as e:
+            print(f"保存预设失败: {e}")
+    
+    def load_presets(self):
+        """从本地文件加载预设数据"""
+        try:
+            settings = QSettings("lemon-o", "ImgProcess")
+            preset_texts = settings.value("presets", [])
+            
+            # 确保返回的是列表
+            if preset_texts and not isinstance(preset_texts, list):
+                preset_texts = [preset_texts]
+            
+            print(f"加载预设: {preset_texts}")
+            
+            if preset_texts:
+                for text in preset_texts:
+                    if text:  # 确保文本不为空
+                        # 创建预设按钮
+                        preset_btn = QPushButton(text)
+                        preset_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #f5f5f5;
+                            color: #495057;
+                            border-radius: 6%;
+                            border: 1px solid #d0d0d0;
+                        }
+                        QPushButton:hover {
+                            background-color: #e0e0e0;
+                            border: 1px solid #a0a0a0;
+                        }
+                        QPushButton:pressed {
+                            background-color: #e0e0e0;
+                            border: none;
+                            border: 1px solid #a0a0a0;
+                        }
+                        QPushButton:checked {
+                            background-color: #e0e0e0;
+                            border: 1px solid #a0a0a0;
+                        }
+                        """)
+                        preset_btn.setCheckable(True)
+                        preset_btn.setCursor(Qt.PointingHandCursor)
+                        preset_btn.clicked.connect(lambda checked, t=text, b=preset_btn: self.preset_btn_clicked(b, t))
+                        
+                        self.preset_layout.addWidget(preset_btn)
+                        self.preset_buttons.append(preset_btn)
+        except Exception as e:
+            print(f"加载预设失败: {e}")
+
 #设置全局字体大小
 def set_global_font_size():
     app = QApplication.instance()
@@ -3213,6 +3850,79 @@ def set_global_font_size():
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    app.setStyleSheet("""
+                                 
+        /* 滚动条样式 */
+        QScrollBar:vertical {
+            border: none;
+            background-color: #f5f5f5;
+            width: 12px;
+            border-radius: 6px;
+            margin: 0px; /* 防止滑块碰到边缘 */
+        }
+
+        /* 滑块 */
+        QScrollBar::handle:vertical {
+            background-color: #c5c5c5;
+            border: none; /* 去掉边框 */
+            border-radius: 5px;
+            min-height: 10px;
+        }
+
+        /* 去掉顶部/底部箭头按钮 */
+        QScrollBar::sub-line:vertical,
+        QScrollBar::add-line:vertical {
+            height: 0px;
+            subcontrol-origin: margin;
+        }
+
+        /* 去掉顶部/底部点击区域的视觉影响 */
+        QScrollBar::add-page:vertical,
+        QScrollBar::sub-page:vertical {
+            background: #f5f5f5;
+            border-radius: 6px;
+        }
+
+         /* 滚动区域样式 */
+        QScrollArea {
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            padding: 8px 12px;
+            background-color: white;
+            selection-background-color: #007bff;
+        }    
+
+        /* 分组框样式 */
+        QGroupBox {
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            padding: 4px;
+            font-weight: 600;
+            color: #495057;
+            margin: 10px 0px 0px 0px; /* （上、右、下、左） */
+            padding-top: 10px;
+            background-color: white;
+        }
+        
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 15px;
+            padding: 2px 8px 2px 8px;
+            background-color: white;
+            border-radius: 8px;   /* 添加圆角 */
+        }  
+
+        /* 输入框样式 */
+        QLineEdit {
+            color: #495057;
+        }       
+
+        /* 文本样式 */
+        QLabel {
+            color: #495057;
+        }                     
+                      
+    """)
     set_global_font_size()
     folder_filter = ImgProcess()
     folder_filter.show()
